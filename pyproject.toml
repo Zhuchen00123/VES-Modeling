@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ves-modeling"
+version = "0.1.0"
+description = "Verifier-first executable search for computational modeling (Regression vertical slice)"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "httpx",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", ".vendor/Verified-Executable-Search", "src"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+# TRY004: ValueError is the contract with VES VerificationPipeline (it catches
+# ValueError -> VERIFICATION_FAILED); TypeError would escape the pipeline.
+ignore = ["TRY004"]
