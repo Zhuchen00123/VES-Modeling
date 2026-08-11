@@ -21,3 +21,7 @@ data/
 # Internal team files (not public)
 .agteam/
 team/
+
+# Local handoff / continuation (not public)
+HANDOFF.md
+CONTINUATION.md
