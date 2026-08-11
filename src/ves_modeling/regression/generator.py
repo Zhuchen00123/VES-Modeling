@@ -2,7 +2,8 @@
 
 - MockRegressionGenerator: returns trusted fixture code (no LLM).
 - LLMRegressionGenerator: provider-neutral adapter over an OpenAI-compatible
-  client (``complete(prompt) -> str``), with draft/improve prompts.
+  client (``complete(prompt) -> str``), with draft/improve prompts that follow
+  the active data contract (target/id/row_order and artifact format).
 """
 
 from __future__ import annotations
@@ -67,66 +68,134 @@ class MockRegressionGenerator:
         return _read_fixture(self._fixture_dir, name)
 
 
-_DRAFT_PROMPT = """\
-You are solving a tabular regression task.
+def _artifact_format_prompt(
+    id_column: str | None, row_order: str
+) -> str:
+    """Artifact format section of the LLM prompt for the active contract."""
+    if row_order == "id":
+        return (
+            "{{\n"
+            '  "predictions": [\n'
+            '    {{"id": <test row id>, "prediction": <number>}},\n'
+            "    ...\n"
+            "  ]\n"
+            "}}\n\n"
+            "Every test row must appear exactly once, using the id from "
+            "test_features.csv. The id is a row identifier, not a model "
+            "feature."
+        )
+    return (
+        "{{\n"
+        '  "predictions": [...]\n'
+        "}}\n\n"
+        "Predictions must be aligned to test_features.csv row order."
+    )
 
-Available files:
-/data/train.csv
-/data/test_features.csv
 
-train.csv contains the target column:
-target
+def _draft_prompt(
+    target_column: str, id_column: str | None, row_order: str
+) -> str:
+    lines = [
+        "You are solving a tabular regression task.",
+        "",
+        "Available files:",
+        "/data/train.csv",
+        "/data/test_features.csv",
+        "",
+        "train.csv contains the target column:",
+        target_column,
+        "",
+    ]
+    if id_column:
+        lines += [
+            "test_features.csv contains the row id column:",
+            id_column,
+            "",
+            "The id column must NOT be used as a model feature.",
+            "",
+        ]
+    lines += [
+        "You must create one complete Python program. The program must:",
+        "1. Load /data/train.csv.",
+        "2. Load /data/test_features.csv.",
+        "3. Train a regression model.",
+        "4. Predict every row in test_features.csv.",
+        "5. Write exactly one artifact:",
+        "   /output/predictions.json",
+        "",
+        "Artifact format:",
+        _artifact_format_prompt(id_column, row_order),
+        "",
+        "You cannot access hidden evaluation labels.",
+        "Do not report or rely on a self-computed test score.",
+        "The host verifier will independently evaluate the predictions.",
+        "",
+        "Allowed libraries: numpy, pandas, scikit-learn.",
+        "Do not use pip install, curl, wget, or network access.",
+        "",
+        "Your response must contain the complete solution.py only.",
+        "Do not wrap the code in markdown fences.",
+    ]
+    return "\n".join(lines)
 
-You must create one complete Python program. The program must:
-1. Load /data/train.csv.
-2. Load /data/test_features.csv.
-3. Train a regression model.
-4. Predict every row in test_features.csv.
-5. Write exactly one artifact:
-   /output/predictions.json
 
-Artifact format:
-{{
-  "predictions": [...]
-}}
-
-You cannot access hidden evaluation labels.
-Do not report or rely on a self-computed test score.
-The host verifier will independently evaluate the predictions.
-
-Allowed libraries: numpy, pandas, scikit-learn.
-Do not use pip install, curl, wget, or network access.
-
-Your response must contain the complete solution.py only.
-Do not wrap the code in markdown fences.
-"""
-
-_IMPROVE_PROMPT = """\
-Previous candidate:
-
-{code}
-
-Host-verified evidence (independently recomputed by the host):
-
-RMSE: {rmse:.6f}
-MAE: {mae:.6f}
-
-Improve the executable solution. You may change preprocessing, feature
-engineering, estimator, hyperparameters, or ensembling.
-
-You must still load /data/train.csv and /data/test_features.csv, predict every
-row, and write exactly one artifact:
-/output/predictions.json
-(format: {{"predictions": [...]}})
-
-You cannot access hidden evaluation labels. Do not report a self-computed
-score; the host verifier independently evaluates the predictions.
-
-Allowed libraries: numpy, pandas, scikit-learn.
-Do not use pip install, curl, wget, or network access.
-
-Return the complete solution.py only. Do not wrap the code in markdown fences.
-"""
+def _improve_prompt(
+    code: str,
+    rmse: float,
+    mae: float,
+    *,
+    target_column: str,
+    id_column: str | None,
+    row_order: str,
+) -> str:
+    lines = [
+        "Previous candidate:",
+        "",
+        code,
+        "",
+        "Host-verified evidence (independently recomputed by the host):",
+        "",
+        f"RMSE: {rmse:.6f}",
+        f"MAE: {mae:.6f}",
+        "",
+        (
+            "Improve the executable solution. You may change preprocessing, "
+            "feature engineering, estimator, hyperparameters, or ensembling."
+        ),
+        "",
+        (
+            "You must still load /data/train.csv and /data/test_features.csv, "
+            "predict every row, and write exactly one artifact:"
+        ),
+        "/output/predictions.json",
+        "",
+        "Artifact format:",
+        _artifact_format_prompt(id_column, row_order),
+        "",
+        "The target column is " + target_column + ".",
+    ]
+    if id_column:
+        lines += [
+            "The id column " + id_column + " must NOT be used as a model "
+            "feature.",
+        ]
+    lines += [
+        "",
+        (
+            "You cannot access hidden evaluation labels. Do not report a "
+            "self-computed score; the host verifier independently evaluates "
+            "the predictions."
+        ),
+        "",
+        "Allowed libraries: numpy, pandas, scikit-learn.",
+        "Do not use pip install, curl, wget, or network access.",
+        "",
+        (
+            "Return the complete solution.py only. Do not wrap the code in "
+            "markdown fences."
+        ),
+    ]
+    return "\n".join(lines)
 
 
 class LLMRegressionGenerator:
@@ -139,10 +208,23 @@ class LLMRegressionGenerator:
     """
 
     def __init__(
-        self, llm: LlmClient, fallback_code: str | None = None
+        self,
+        llm: LlmClient,
+        fallback_code: str | None = None,
+        *,
+        target_column: str = "target",
+        id_column: str | None = None,
+        row_order: str = "input",
     ) -> None:
         self._llm = llm
         self._fallback_code = fallback_code
+        if row_order not in ("input", "id"):
+            raise ValueError("row_order must be 'input' or 'id'")
+        if row_order == "id" and not id_column:
+            raise ValueError("row_order='id' requires id_column")
+        self._target_column = target_column
+        self._id_column = id_column
+        self._row_order = row_order
 
     def _complete(self, prompt: str) -> str:
         try:
@@ -158,7 +240,11 @@ class LLMRegressionGenerator:
             return self._fallback_code
 
     def draft(self, problem: VerifiedProblem, index: int) -> str:
-        return self._complete(_DRAFT_PROMPT)
+        return self._complete(
+            _draft_prompt(
+                self._target_column, self._id_column, self._row_order
+            )
+        )
 
     def improve(
         self, problem: VerifiedProblem, anchor: VerifiedCandidate
@@ -167,10 +253,13 @@ class LLMRegressionGenerator:
         rmse = _observation(evidence, "rmse")
         mae = _observation(evidence, "mae")
         return self._complete(
-            _IMPROVE_PROMPT.format(
-                code=anchor.program,
-                rmse=rmse,
-                mae=mae,
+            _improve_prompt(
+                anchor.program,
+                rmse,
+                mae,
+                target_column=self._target_column,
+                id_column=self._id_column,
+                row_order=self._row_order,
             )
         )
 

@@ -59,7 +59,7 @@ python examples/regression_demo.py --llm --drafts 2 --improves 3
 
 每次搜索在 `runs/<run-id>/` 保存 `summary.json`、`best_solution.py`、`config.json`（不保存 API key / 隐藏标签）。
 
-## 稳定 Regression API（R7.2）
+## 稳定 Regression API（R7.2–R7.3）
 
 上层项目（VES-MathModeling-Skill 等）通过 `run_regression_search` 调用，
 不依赖 `examples/regression_demo.py`，也不需要理解 VES Core 内部类型。
@@ -76,14 +76,52 @@ result = run_regression_search(
     improves=3,
     workspace=Path("runs"),
     generator="mock",  # "mock"=可信夹具+本地 runner；"llm"=LLM generator+Docker runner
+    target_column="target",
+    id_column=None,
+    row_order="input",
 )
 print(result.status, result.best_rmse, result.best_mae, result.rejected)
+print(result.to_summary())  # API_SCHEMA_VERSION=1.0 的纯 JSON 视图
 ```
 
 - `RegressionSearchResult` 字段：`status`（verified / no_verified）、`best_code`、
-  `best_evidence`、`best_rmse`、`best_mae`、`rejected`、`run_dir`、`records`
-- 每次搜索在 `runs/<run-id>/` 保存 `best_solution.py`、`summary.json`、`config.json`
+  `best_evidence`、`best_rmse`、`best_mae`、`rejected`、`run_dir`、`records`、
+  `candidates`、`data_contract`
+- 每次搜索在统一的 `runs/<run-id>/` 保存 `best_solution.py`、`summary.json`、
+  `config.json`、`provenance.json`，每个候选在 `candidates/<attempt>/` 保存代码、
+  stdout/stderr、artifact 与结构化 `run.json`
 - 成绩全部来自宿主 verifier，从不采信 candidate 自报指标
+
+### 应用已选方案到未知测试集
+
+```python
+from ves_modeling.regression import apply_regression_solution
+
+applied = apply_regression_solution(
+    result.best_code,
+    public_dir=Path("formal/public"),  # full train.csv + unknown test_features.csv
+    workspace=Path("runs"),
+    # 未指定 trusted_code=True 时默认在 Docker 中执行
+)
+print(applied.status)       # produced_unverified
+print(applied.to_summary()) # 无官方 labels 时绝不生成 RMSE/MAE
+```
+
+`apply_regression_solution` 成功只表示预测文件已按契约产出并通过结构校验，状态固定为
+`produced_unverified`。它保存代码/数据/预测哈希、日志、Docker 镜像身份与运行环境，
+但在没有官方标签时不会伪造任何质量指标。
+
+### 显式数据契约
+
+- `target_column` 默认 `target`，可自定义。
+- `id_column` 可选；配置后 train/test/host 的 ID 必须非空、唯一且集合一致，宿主标签按
+  public test ID 对齐。
+- `row_order="input"` 保持兼容格式 `{"predictions": [number, ...]}`；
+  `row_order="id"` 要求 `{"predictions": [{"id": ..., "prediction": number}, ...]}`。
+- train 去掉 target 后的输入列必须与 test 名称及顺序完全一致；ID 列记录在
+  `input_columns`，但不会被宣称为模型 `feature_columns`。
+- `capabilities()` 返回稳定的 JSON 能力声明；完整交付契约见
+  [`docs/r7.3-delivery-contract.md`](docs/r7.3-delivery-contract.md)。
 
 ## 进度（idea.md R0-R7）
 
@@ -96,14 +134,16 @@ print(result.status, result.best_rmse, result.best_mae, result.rejected)
 - R6 Real Closed Loop ✅ 真实 LLM（deepseek-v4-flash / OpenCode Go / reasoning_effort=high / SSE 流式）+ 真实 Docker 闭环跑通：
   `2 drafts + 3 improves` 全部 VERIFIED（rejected=0），BEST VERIFIED rmse=62.428 mae=47.177（run 3f9b78c1a9a6）；
   配置 `VES_MODELING_LLM_BASE_URL/API_KEY/MODEL` 后跑 `python examples/regression_demo.py --llm --drafts 2 --improves 3`
-- R7.1 Cleanup 进行中：B-005 运行日志落盘（stdout.log/stderr.log）、hidden labels finite 校验、
+- R7.1 Cleanup ✅ B-005 运行日志落盘（stdout.log/stderr.log）、hidden labels finite 校验、
   RegressionVerificationContext invariant、CI（GitHub Actions，Docker 测试独立 marker）
 - R7.2 Stable Regression API ✅ `ves_modeling.regression.run_regression_search`（见上）+ API 集成测试
+- R7.3 Regression delivery closure ✅ apply API、稳定 JSON 协议、provenance、统一 run 树、
+  结构化失败分类与显式 target/ID/row-order 数据契约；`122 passed`（含 Docker 安全测试）
 
 ## 目录
 
 ```text
-src/ves_modeling/regression/   problem / context / verifier / generator / runner
+src/ves_modeling/regression/   API / apply / data contract / verifier / generator / runner
 fixtures/candidates/           可信手写候选 + 对抗候选（cheating_candidate.py）
 examples/regression_demo.py    --mock / --llm 入口
 scripts/generate_regression_data.py

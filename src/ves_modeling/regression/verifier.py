@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 from typing import Any
 
 import numpy as np
@@ -12,6 +11,7 @@ from ves.context import VerificationContext
 from ves.evidence import Evidence, Observation
 
 from ves_modeling.regression.context import RegressionVerificationContext
+from ves_modeling.regression.data_contract import validate_predictions
 
 
 class RegressionVerifier:
@@ -33,7 +33,13 @@ class RegressionVerifier:
         if not isinstance(context, RegressionVerificationContext):
             raise TypeError("RegressionVerifier requires RegressionVerificationContext")
         payload = self._parse(raw_artifact)
-        predictions = self._validate_predictions(payload, context)
+        predictions = validate_predictions(
+            payload,
+            expected_count=context.expected_count,
+            test_ids=(
+                context.prediction_ids if context.row_order == "id" else None
+            ),
+        )
         labels = context.hidden_labels()
         rmse = float(np.sqrt(np.mean((predictions - labels) ** 2)))
         mae = float(np.mean(np.abs(predictions - labels)))
@@ -68,31 +74,3 @@ class RegressionVerifier:
         if not isinstance(data, dict):
             raise ValueError("predictions.json root must be an object")
         return data
-
-    @staticmethod
-    def _validate_predictions(
-        payload: dict[str, Any], context: RegressionVerificationContext
-    ) -> np.ndarray:
-        if "predictions" not in payload:
-            raise ValueError("missing required field 'predictions'")
-        raw = payload["predictions"]
-        if isinstance(raw, (str, bytes)) or not isinstance(raw, list):
-            raise ValueError("'predictions' must be a JSON array")
-        expected = context.expected_count
-        if len(raw) != expected:
-            raise ValueError(
-                f"prediction count {len(raw)} != expected {expected}"
-            )
-        values: list[float] = []
-        for item in raw:
-            if isinstance(item, bool):
-                raise ValueError("predictions must not contain booleans")
-            if not isinstance(item, (int, float)):
-                raise ValueError(
-                    f"predictions must be numbers, got {type(item).__name__}"
-                )
-            value = float(item)
-            if not math.isfinite(value):
-                raise ValueError("predictions must be finite (no NaN/Infinity)")
-            values.append(value)
-        return np.asarray(values, dtype=np.float64)

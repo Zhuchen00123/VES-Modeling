@@ -17,6 +17,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +32,18 @@ class RunResult:
     stderr: str = ""
     returncode: int | None = None
     timed_out: bool = False
+    run_root: Path | None = None
+
+
+def validate_run_id(run_id: str) -> None:
+    """Reject run ids that could escape a workspace or confuse tooling."""
+    if re.fullmatch(r"[A-Za-z0-9_-]+", run_id) is None:
+        raise ValueError("run_id may contain only letters, digits, '_' and '-'")
 
 
 def _validate_run_id(run_id: str) -> None:
-    if re.fullmatch(r"[A-Za-z0-9_-]+", run_id) is None:
-        raise ValueError("run_id may contain only letters, digits, '_' and '-'")
+    """Backwards-compatible alias for :func:`validate_run_id`."""
+    validate_run_id(run_id)
 
 
 
@@ -82,16 +90,25 @@ class LocalRegressionRunner:
         *,
         timeout_seconds: float = 300.0,
         python_executable: str = sys.executable,
+        run_layout: Literal["nested", "flat"] = "nested",
     ) -> None:
         self.workspace = Path(workspace)
         self.data_dir = Path(data_dir)
         self.timeout_seconds = timeout_seconds
         self.python_executable = python_executable
+        if run_layout not in ("nested", "flat"):
+            raise ValueError("run_layout must be 'nested' or 'flat'")
+        self.run_layout = run_layout
         self.workspace.mkdir(parents=True, exist_ok=True)
 
     def run(self, code: str, run_id: str) -> RunResult:
         _validate_run_id(run_id)
-        run_dir = _prepare_run_dir(self.workspace / "runs" / run_id)
+        base = (
+            self.workspace
+            if self.run_layout == "flat"
+            else self.workspace / "runs"
+        )
+        run_dir = _prepare_run_dir(base / run_id)
         code_path = run_dir / "solution.py"
         code_path.write_text(code, encoding="utf-8")
 
@@ -125,11 +142,11 @@ class LocalRegressionRunner:
         return RunResult(
             succeeded=not timed_out and returncode == 0,
             run_dir=run_dir,
+            run_root=run_dir,
             stdout=stdout,
             stderr=stderr,
             returncode=returncode,
             timed_out=timed_out,
-            # duration computed below for symmetry
         )
 
 
@@ -148,6 +165,7 @@ class DockerRunnerConfig:
     max_output_chars: int = 50_000
     docker_executable: str = "docker"
     public_files: tuple[str, ...] = ("train.csv", "test_features.csv")
+    run_layout: Literal["nested", "flat"] = "nested"
 
     def __post_init__(self) -> None:
         if self.timeout_seconds <= 0 or self.cpus <= 0:
@@ -169,6 +187,8 @@ class DockerRunnerConfig:
                 raise ValueError(
                     f"public_files entries must be plain file names, got {name!r}"
                 )
+        if self.run_layout not in ("nested", "flat"):
+            raise ValueError("run_layout must be 'nested' or 'flat'")
 
 
 class DockerRegressionRunner:
@@ -188,6 +208,8 @@ class DockerRegressionRunner:
 
     def __init__(self, config: DockerRunnerConfig) -> None:
         self.config = config
+        self._image_digest: str | None = None
+        self._image_digest_error: str | None = None
         try:
             self._workspace = _normalize_docker_host_path(
                 config.workspace.resolve()
@@ -202,6 +224,68 @@ class DockerRegressionRunner:
         if self.config.image_digest is not None:
             return f"{self.config.image}@{self.config.image_digest}"
         return self.config.image
+
+    @property
+    def effective_image_digest(self) -> str | None:
+        """Configured digest, or the digest resolved via image inspect."""
+        return self.config.image_digest or self._image_digest
+
+    @property
+    def image_digest_error(self) -> str | None:
+        """Why digest resolution failed (None when configured/resolved)."""
+        return None if self.config.image_digest is not None else self._image_digest_error
+
+    @property
+    def image_digest_status(self) -> str:
+        """'configured', 'resolved' or 'unresolved'."""
+        if self.config.image_digest is not None:
+            return "configured"
+        if self._image_digest is not None:
+            return "resolved"
+        return "unresolved"
+
+    def resolve_image_digest(self) -> None:
+        """Best-effort resolve the image ID via ``docker image inspect``.
+
+        Only runs when no digest was configured.  Failures are recorded in
+        ``image_digest_error`` so callers never mistake an unresolved digest
+        for a recorded one.
+        """
+        if self.config.image_digest is not None:
+            return
+        if self._image_digest is not None or self._image_digest_error is not None:
+            return
+        try:
+            completed = subprocess.run(
+                [
+                    self.config.docker_executable,
+                    "image",
+                    "inspect",
+                    "--format",
+                    "{{.Id}}",
+                    self.config.image,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            self._image_digest_error = f"image inspect failed: {exc}"
+            return
+        if completed.returncode != 0:
+            self._image_digest_error = (
+                completed.stderr.strip()
+                or f"image inspect failed with rc={completed.returncode}"
+            )
+            return
+        digest = completed.stdout.strip()
+        if digest.startswith("sha256:") and _HEX_RE.fullmatch(digest[7:]):
+            self._image_digest = digest
+        else:
+            self._image_digest_error = (
+                f"unexpected image id format from inspect: {digest!r}"
+            )
 
     def is_available(self) -> bool:
         executable = shutil.which(self.config.docker_executable)
@@ -299,7 +383,14 @@ class DockerRegressionRunner:
             raise RuntimeError(
                 "Docker daemon unavailable; enable Docker Desktop WSL integration"
             )
-        run_root = _prepare_run_dir(self._workspace / "runs" / run_id)
+        if self.config.image_digest is None:
+            self.resolve_image_digest()
+        base = (
+            self._workspace
+            if self.config.run_layout == "flat"
+            else self._workspace / "runs"
+        )
+        run_root = _prepare_run_dir(base / run_id)
         code_dir = run_root / "code"
         output_dir = run_root / "output"
         code_dir.mkdir(parents=True, exist_ok=False)
@@ -340,6 +431,7 @@ class DockerRegressionRunner:
         return RunResult(
             succeeded=not timed_out and returncode == 0,
             run_dir=output_dir,
+            run_root=run_root,
             stdout=self._limit(stdout),
             stderr=self._limit(stderr),
             returncode=returncode,

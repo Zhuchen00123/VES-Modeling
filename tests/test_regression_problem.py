@@ -14,10 +14,22 @@ from ves_modeling.regression.problem import (
 )
 
 
+def _make_public(root: Path, rows: int = 3) -> Path:
+    public = root / "public"
+    public.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(
+        {"x0": [1.0, 2.0, 3.0][:rows], "target": [1.0, 2.0, 3.0][:rows]}
+    ).to_csv(public / "train.csv", index=False)
+    pd.DataFrame({"x0": [0.5, 0.6, 0.7][:rows]}).to_csv(
+        public / "test_features.csv", index=False
+    )
+    return public
+
+
 def test_problem_assembly(tmp_path: Path):
     labels = np.array([1.0, 2.0, 3.0])
     problem = build_regression_problem(
-        tmp_path / "public", tmp_path / "host", labels=labels
+        _make_public(tmp_path), tmp_path / "host", labels=labels
     )
     assert problem.contract.filename == "predictions.json"
     assert problem.contract.required_fields == ("predictions",)
@@ -41,7 +53,7 @@ def test_problem_assembly(tmp_path: Path):
 def test_context_fingerprint_is_one_way_and_sensitive(tmp_path: Path):
     labels = np.array([1.0, 2.0, 3.0])
     problem = build_regression_problem(
-        tmp_path / "public", tmp_path / "host", labels=labels
+        _make_public(tmp_path), tmp_path / "host", labels=labels
     )
     fingerprint = problem.make_context().fingerprint()
     assert fingerprint != "".join(
@@ -53,13 +65,17 @@ def test_context_fingerprint_is_one_way_and_sensitive(tmp_path: Path):
 def test_build_problem_rejects_nan_labels(tmp_path: Path):
     labels = np.array([1.0, np.nan, 3.0])
     with pytest.raises(ValueError, match="hidden labels"):
-        build_regression_problem(tmp_path / "public", tmp_path / "host", labels=labels)
+        build_regression_problem(
+            _make_public(tmp_path), tmp_path / "host", labels=labels
+        )
 
 
 def test_build_problem_rejects_inf_labels(tmp_path: Path):
     labels = np.array([1.0, np.inf, 3.0])
     with pytest.raises(ValueError, match="hidden labels"):
-        build_regression_problem(tmp_path / "public", tmp_path / "host", labels=labels)
+        build_regression_problem(
+            _make_public(tmp_path), tmp_path / "host", labels=labels
+        )
 
 
 def test_load_hidden_labels_rejects_nan(tmp_path: Path):
