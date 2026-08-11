@@ -38,6 +38,17 @@ def _validate_run_id(run_id: str) -> None:
         raise ValueError("run_id may contain only letters, digits, '_' and '-'")
 
 
+
+def _prepare_run_dir(run_root: Path) -> Path:
+    """Create a fresh run root; remove a stale one so workspaces are reusable."""
+    import shutil as _shutil
+
+    resolved = run_root.resolve()
+    if resolved.exists():
+        _shutil.rmtree(resolved)
+    resolved.mkdir(parents=True, exist_ok=False)
+    return resolved
+
 def _normalize_docker_host_path(path: Path) -> Path:
     """Rewrite a /codexprojects prefix to its /mnt/f equivalent (VES pattern)."""
     s = str(path)
@@ -67,8 +78,7 @@ class LocalRegressionRunner:
 
     def run(self, code: str, run_id: str) -> RunResult:
         _validate_run_id(run_id)
-        run_dir = (self.workspace / "runs" / run_id).resolve()
-        run_dir.mkdir(parents=True, exist_ok=False)
+        run_dir = _prepare_run_dir(self.workspace / "runs" / run_id)
         code_path = run_dir / "solution.py"
         code_path.write_text(code, encoding="utf-8")
 
@@ -275,7 +285,7 @@ class DockerRegressionRunner:
             raise RuntimeError(
                 "Docker daemon unavailable; enable Docker Desktop WSL integration"
             )
-        run_root = (self._workspace / "runs" / run_id).resolve()
+        run_root = _prepare_run_dir(self._workspace / "runs" / run_id)
         code_dir = run_root / "code"
         output_dir = run_root / "output"
         code_dir.mkdir(parents=True, exist_ok=False)

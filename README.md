@@ -35,23 +35,15 @@ train.csv / test_features.csv / hidden_test_labels.csv
 - Candidate 自报的 `claimed_rmse` / stdout 分数**一律忽略**，Judge 只消费宿主 `Evidence`。
 - 真实 LLM 候选只在 Docker 沙箱运行（`--network none`、`--read-only`、`--cap-drop ALL`、no-new-privileges、非 root、资源限制、public_files 白名单逐文件挂载）。
 
-## Hugging Face
-
-- Space（落地页）：https://huggingface.co/spaces/235dsds/VES-Modeling
-- Dataset（公开回归数据）：https://huggingface.co/datasets/235dsds/VES-Modeling
-
 ## 快速开始
 
 ```bash
 # 1. 依赖（Python >= 3.11）
-# 安装 VES Core v0.1.0（二选一）：
-git clone --branch v0.1.0 --depth 1 https://github.com/Zhuchen00123/Verified-Executable-Search.git .vendor/Verified-Executable-Search
 pip install -e .vendor/Verified-Executable-Search
-# 或：pip install "verified-executable-search @ git+https://github.com/Zhuchen00123/Verified-Executable-Search.git@v0.1.0"
 pip install -e ".[dev]"
 
 # 2. 生成数据（固定 seed，可复现）
-python scripts/generate_regression_data.py
+python scripts/generate_regression_data.py   # 默认加州房价（20640 样本）
 
 # 3. 测试
 pytest

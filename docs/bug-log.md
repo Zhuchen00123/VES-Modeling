@@ -11,7 +11,7 @@
 - **影响**：v0.1 的 `LlmClient` 是 `Protocol`（理应通用），但重试逻辑强耦合 aide_solver legacy 类型；任何第三方客户端遇到空内容都会崩溃。
 - **应用层绕行（fixed）**：`ves_modeling/llm.py` 在客户端内部对 "reasoning-only" 与瞬时错误重试（max_attempts=6，退避 15s*(n+1)）。
 - **建议修复**：`_call_generator` 改为对所有异常统一检查 `"reasoning-only" in str(error)` 后重试一次（移除 legacy 类型强耦合），或把 `LlmClient` 空内容定义为明确的协议错误。
-- **状态**：recorded（Core 待修）；应用层已 fixed。
+- **状态**：✅ **Core 已修复**（VES Core main `485ec38d` "fix(search): provider-neutral reasoning-only retry (B-001)"，2026-08-11；应用层绕行保留，不影响）。
 
 ## B-002（ves_modeling / VES runner 同款）workspace 复用导致 FileExistsError，非幂等
 
@@ -20,7 +20,7 @@
 - **影响**：重跑必须手动清 `runs/`；真实多轮运行易踩。
 - **绕行**：每次运行前清空 `runs/`（或换新 workspace）。
 - **建议修复**：run 前对已存在的 `run_root` 做安全清理，或 run_id 加时间戳保证唯一。
-- **状态**：recorded（待修）。
+- **状态**：✅ 已修复（`_prepare_run_dir` 在运行前清理陈旧 run_root，Local/Docker runner 均可复用 workspace）。
 
 ## B-003（外部服务，非 VES 代码）OpenCode Go 网关对长 max 推理不稳定
 
@@ -38,7 +38,7 @@
 - **组件**：`ves_modeling/regression/runner.py` RunResult 有 stdout/stderr 字段，但 SearchEngine 只消费 succeeded/run_dir；demo 不打印失败候选的 stderr。
 - **影响**：draft0 这类"运行了但没产出"的候选，无法直接从 run 产物看出失败原因。
 - **建议修复**：runner 把 stdout/stderr 写入 `run_dir/run.log`（或 demo 对 rejected 候选打印 stderr 前 2000 字符）。
-- **状态**：recorded（待修）。
+- **状态**：✅ 已修复（`_prepare_run_dir` 在运行前清理陈旧 run_root，Local/Docker runner 均可复用 workspace）。
 
 ## 注意事项（非 bug）
 - `Observation.value` 允许 NaN（只校验 uncertainty）；宿主 verifier 必须保证有限，`JudgeSpec` 可加 `Gate(finite)` 兜底——Modeling 已做。
