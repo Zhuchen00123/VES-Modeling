@@ -1,6 +1,8 @@
 # VES Core v0.1.0 理解文档（R0）
 
-> Source of truth：`.vendor/Verified-Executable-Search`（commit `fe4fcc4`，tag v0.1.0）。
+> Current source of truth: PyPI `verified-executable-search==0.1.0`
+> (structured-attempt fix commit `cfea8bd`). The original R0 audit used the
+> historical local checkout at commit `fe4fcc4`.
 > 本文件记录 Modeling 层对 Core 的理解、每个对象的生命周期/信任边界，以及与 idea.md 的差异。
 
 ## 1. Verification 链路
@@ -38,14 +40,14 @@ VerificationResult  status(VERIFIED/INVALID_ARTIFACT/VERIFICATION_FAILED) + evid
 
 实际签名（以源码为准）：
 - `CandidateGenerator(Protocol)`：`draft(problem: VerifiedProblem, index: int) -> str`；`improve(problem, anchor: VerifiedCandidate) -> str`。
-- `CodeRunner(Protocol)`：`run(code: str, run_id: str) -> RunResult`；RunResult 仅要求 `succeeded: bool` + `run_dir: Path`（预留 duration/stdout/stderr）。
+- `CodeRunner(Protocol)`：`run(code: str, run_id: str) -> RunResult`；RunResult 仅要求 `succeeded: bool` + `run_dir: Path`，并通过可选 `timed_out` / `stderr` 丰富失败 outcome（旧 runner 兼容）。
 - `AnchorPolicy(Protocol)`：`next_anchor(verified, judge, spec, rng=None, *, allow_infeasible=True) -> VerifiedCandidate | None`。
 - `SearchEngine(problem=, generator=, runner=, anchor_policy=, drafts=, improves=, rng=)`；`search() -> SearchResult`。
-- `SearchResult`：best_code / best_evidence / best_record / records / rejected / policy / drafts / improves / best_feasible。
+- `SearchResult`：best_code / best_evidence / best_record / records / rejected / policy / drafts / improves / best_feasible / attempts。每个 `AttemptOutcome` 提供 attempt id、状态、run dir、hash、issues 与可选 verified record。
 - `_strip_code_fence`：SearchEngine 内部已剥离 markdown 围栏（真实 LLM 会包 ```python）。
 - 引擎零题型引用：artifact filename 来自 `problem.contract.filename`；prompt 完全由注入的 generator 负责。
 - 注意：`SearchEngine` 构造时若 `judge_spec.rule is PARETO` 直接 ValueError（v0.1 只支持全序）。
-- 每轮 `_run_and_verify`：runner.run -> SafeArtifactLoader(contract.filename) -> pipeline.verify；只有 VERIFIED 才进 pool；rejected 计数非 VERIFIED/runner 失败。
+- 每轮 `_run_and_verify`：runner.run -> SafeArtifactLoader(contract.filename) -> pipeline.verify；每次尝试都生成结构化 `AttemptOutcome`，只有 VERIFIED 才进 pool；`rejected` 由非 VERIFIED outcomes 派生。
 - `Candidate` lineage：draft（root_id==id, parent=None, generation=0）/ improve（parent_id=anchor.id, root_id=anchor.root_id, generation+1）；`VerifiedCandidate(candidate, artifact, record)`。
 
 ## 4. Security（R5 依据）
@@ -57,7 +59,7 @@ VerificationResult  status(VERIFIED/INVALID_ARTIFACT/VERIFICATION_FAILED) + evid
 
 ## 5. 与 idea.md 的差异 / 注意点
 
-1. `SearchEngine` 的 runner 契约是 `run(code, run_id)`，与 idea.md 一致；RunResult 最少字段 `succeeded` + `run_dir`（没有 artifact 字段）——artifact 由 SafeArtifactLoader 从 run_dir 读 contract.filename。
+1. `SearchEngine` 的 runner 契约是 `run(code, run_id)`，与 idea.md 一致；RunResult 最少字段 `succeeded` + `run_dir`（没有 artifact 字段），可选 `timed_out` / `stderr` 被 outcome 分类消费；artifact 由 SafeArtifactLoader 从 run_dir 读 contract.filename。
 2. `CandidateGenerator.draft(problem, index)` / `improve(problem, anchor)` —— idea.md 描述一致。
 3. VES 没有独立的 ArtifactContract JSON root/数组领域校验——predictions 长度/有限性由 RegressionVerifier 承担（与 idea.md §9 一致）。
 4. `SearchEngine` 已内置 `_strip_code_fence`，prompt 仍建议显式要求不要 markdown 围栏。

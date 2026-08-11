@@ -1,8 +1,8 @@
-"""Application-layer candidate diagnostics (R7.3 Batch A).
+"""Candidate diagnostic persistence for the Regression delivery API.
 
-VES Core's ``SearchEngine`` does not expose per-attempt rejection detail; this
-module re-derives the classification in the application layer and persists a
-structured ``run.json`` per candidate.  Core is never modified.
+VES Core 0.1.0 exposes structured ``SearchResult.attempts``.  This module only
+maps those public outcomes to VES-Modeling's persisted ``run.json`` contract;
+it does not copy or override Core search control flow.
 
 Candidate statuses (contract ``docs/r7.3-delivery-contract.md``):
 ``execution_failed`` / ``timeout`` / ``artifact_missing`` /
@@ -13,140 +13,22 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from ves.artifact import SafeArtifactLoader
-from ves.problem import VerificationStatus
-from ves.record import Candidate, VerifiedCandidate
-from ves.search_engine import SearchEngine
+from ves.search_engine import AttemptStatus
 
-from ves_modeling.regression.runner import RunResult
-
-CANDIDATE_STATUSES = (
-    "execution_failed",
-    "timeout",
-    "artifact_missing",
-    "artifact_invalid",
-    "verification_failed",
-    "verified",
-)
+# Preserve the JSON-facing v1 ordering while deriving every value from Core's
+# public enum (no duplicated status strings/control-flow protocol).
+CANDIDATE_STATUSES = tuple(
+    status.value for status in AttemptStatus if status is not AttemptStatus.VERIFIED
+) + (AttemptStatus.VERIFIED.value,)
 APPLY_STATUSES = ("produced_unverified",)
 
 
 def sha256_text(text: str) -> str:
     """SHA-256 of UTF-8 text (used for candidate code and summaries)."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-@dataclass(frozen=True)
-class CandidateOutcome:
-    """One attempted candidate: code, execution result and classification."""
-
-    candidate: str
-    code: str
-    run_result: RunResult
-    status: str
-    issues: tuple[str, ...] = ()
-    artifact_sha256: str | None = None
-    evidence: dict[str, float] | None = None
-    core_candidate_id: str | None = None
-
-
-class ClassifyingSearchEngine(SearchEngine):
-    """SearchEngine that records every attempted candidate's outcome.
-
-    The override mirrors ``SearchEngine._run_and_verify`` and additionally
-    captures the exact rejection reason.  It runs entirely in the application
-    layer; the vendored Core is not modified.
-    """
-
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-        self.outcomes: dict[str, CandidateOutcome] = {}
-
-    def _run_and_verify(  # type: ignore[override]
-        self,
-        code: str,
-        run_id: str,
-        parent: VerifiedCandidate | None = None,
-    ) -> tuple[VerifiedCandidate, Any] | None:
-        run_result = self.runner.run(code, run_id=run_id)
-        if not run_result.succeeded:
-            status = "timeout" if run_result.timed_out else "execution_failed"
-            self.outcomes[run_id] = CandidateOutcome(
-                candidate=run_id,
-                code=code,
-                run_result=run_result,
-                status=status,
-                issues=(f"returncode={run_result.returncode}",),
-            )
-            return None
-        artifact_path = Path(run_result.run_dir) / self._artifact_filename
-        try:
-            artifact = SafeArtifactLoader(root=run_result.run_dir).load(
-                self._artifact_filename
-            )
-        except ValueError as exc:
-            status = (
-                "artifact_missing"
-                if not artifact_path.exists()
-                else "artifact_invalid"
-            )
-            self.outcomes[run_id] = CandidateOutcome(
-                candidate=run_id,
-                code=code,
-                run_result=run_result,
-                status=status,
-                issues=(str(exc),),
-            )
-            return None
-        result = self._pipeline.verify(artifact)
-        if (
-            result.status is not VerificationStatus.VERIFIED
-            or result.evidence is None
-            or result.record is None
-        ):
-            status = (
-                "artifact_invalid"
-                if result.status is VerificationStatus.INVALID_ARTIFACT
-                else "verification_failed"
-            )
-            self.outcomes[run_id] = CandidateOutcome(
-                candidate=run_id,
-                code=code,
-                run_result=run_result,
-                status=status,
-                issues=tuple(result.issues),
-            )
-            return None
-        candidate = (
-            Candidate.draft(code)
-            if parent is None
-            else Candidate.improve(parent.candidate, code)
-        )
-        record = replace(
-            result.record,
-            candidate_id=candidate.id,
-            candidate_sha256=sha256_text(code),
-        )
-        verified = VerifiedCandidate(
-            candidate=candidate, artifact=artifact, record=record
-        )
-        self.outcomes[run_id] = CandidateOutcome(
-            candidate=run_id,
-            code=code,
-            run_result=run_result,
-            status="verified",
-            artifact_sha256=record.artifact_sha256,
-            evidence={
-                observation.name: observation.value
-                for observation in result.evidence
-            },
-            core_candidate_id=record.candidate_id,
-        )
-        return verified, record
 
 
 def detect_solution_path(run_root: Path) -> str | None:

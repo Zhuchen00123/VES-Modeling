@@ -1,12 +1,12 @@
 # VES Modeling 测试 Bug 台账（待修复）
 
-> 记录 R6 真实闭环测试中发现的问题；修复建议面向 VES Core（.vendor/Verified-Executable-Search，勿直接改）与 ves_modeling 自身。
+> 记录真实闭环测试中发现的问题；VES Core 使用 PyPI 正式包，问题在上游修复，不在本项目复制 Core 控制流。
 > 状态：`recorded` = 已记录待修；`fixed` = 已在应用层绕行（Core 仍待修）。
 
 ## VES Core 上游处理规则
 
 所有 VES Core 问题先在本文件登记编号、最小复现、影响范围、应用层绕行与建议修复，
-不得直接修改本项目的 `.vendor/Verified-Executable-Search` 副本。
+不得在本项目 vendor 或复制 VES Core 搜索控制流。
 
 - **小型 Core bug**：改动局部、行为边界清楚、兼容风险低且能补充回归测试时，可以向
   VES Core 提交 PR；PR 链接和上游提交号回填本台账。
@@ -64,14 +64,16 @@
   artifact_missing、artifact_invalid 或 verification_failed，也无法可靠关联 attempt id、
   run directory、stdout/stderr、artifact hash 与拒绝原因。工作流只能复制 SearchEngine
   控制流或依赖 runner 私有状态，造成公共协议漂移和审计链断裂。
-- **应用层绕行（fixed）**：R7.3 使用 `ClassifyingSearchEngine` 在 Modeling 层保留每次
-  attempt，写入 `candidates/<attempt>/run.json`，并在 summary 中返回 candidate status。
+- **历史应用层绕行**：R7.3 曾使用 `ClassifyingSearchEngine` 保留每次 attempt；在 Core
+  正式提供 `SearchResult.attempts` 后已移除复制的搜索控制流，只保留 Modeling 的
+  `run.json` 持久化映射。
 - **建议 Core 方向**：为每次 attempt 定义稳定的 outcome/diagnostic 类型和状态枚举；
   `SearchResult` 同时返回 verified records 与全部 attempt outcomes，并保留 run identity、
   可公开错误摘要和 artifact/record 关联。需先设计兼容与序列化协议，不建议局部打补丁。
-- **状态**：🟢 已提交 VES Core
-  [Issue #2](https://github.com/Zhuchen00123/Verified-Executable-Search/issues/2)，
-  等待维护团队设计公共 outcome/diagnostic 协议。
+- **状态**：✅ **Core 已修复并迁移**：Issue #2 由 Core `cfea8bd` 实现
+  `AttemptStatus` / `AttemptOutcome` / `SearchResult.attempts` 后关闭；修复已发布在
+  PyPI `verified-executable-search==0.1.0`。Modeling 改为正式依赖并删除应用层
+  `SearchEngine` override。
 
 ## 注意事项（非 bug）
 - `Observation.value` 允许 NaN（只校验 uncertainty）；宿主 verifier 必须保证有限，`JudgeSpec` 可加 `Gate(finite)` 兜底——Modeling 已做。

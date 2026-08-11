@@ -38,8 +38,7 @@ train.csv / test_features.csv / hidden_test_labels.csv
 ## 快速开始
 
 ```bash
-# 1. 依赖（Python >= 3.11）
-pip install -e .vendor/Verified-Executable-Search
+# 1. 依赖（Python >= 3.11；自动安装 PyPI VES Core）
 pip install -e ".[dev]"
 
 # 2. 生成数据（固定 seed，可复现）
@@ -149,7 +148,7 @@ examples/regression_demo.py    --mock / --llm 入口
 scripts/generate_regression_data.py
 tests/                         verifier / problem / mock search / claim-ignored / docker hidden truth
 docs/                          ves-core-understanding / architecture / core-gaps
-.vendor/Verified-Executable-Search   VES Core v0.1.0（不改动）
+PyPI: verified-executable-search    VES Core v0.1.0（正式依赖）
 ```
 
 ## 安全

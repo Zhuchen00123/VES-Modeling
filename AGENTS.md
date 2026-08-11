@@ -15,8 +15,9 @@ universal modeling framework here.
   public artifacts, logs, or records.
 - Real LLM-generated code runs only through the Docker sandbox. Local execution
   is limited to explicitly trusted fixtures and tests.
-- Do not modify `.vendor/Verified-Executable-Search` in this repository.
-  Record Core findings in `docs/bug-log.md`; submit a tested upstream PR only
+- Use the published `verified-executable-search` dependency; do not vendor or
+  copy Core search control flow into this repository. Record Core findings in
+  `docs/bug-log.md`; submit a tested upstream PR only
   for small, local bugs, and use an upstream Issue for architectural problems.
 - Never commit API keys, tokens, private datasets, `team/`, `data/`, or `runs/`.
 

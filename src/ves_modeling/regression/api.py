@@ -24,14 +24,11 @@ from typing import Any, Literal
 
 import numpy as np
 from ves.search import GreedyTop1Policy
+from ves.search_engine import SearchEngine
 
 from ves_modeling.llm import OpenAICompatibleClient
 from ves_modeling.regression.data_contract import validate_regression_data
-from ves_modeling.regression.diagnostics import (
-    ClassifyingSearchEngine,
-    sha256_text,
-    write_run_json,
-)
+from ves_modeling.regression.diagnostics import sha256_text, write_run_json
 from ves_modeling.regression.generator import (
     LlmClient,
     LLMRegressionGenerator,
@@ -286,7 +283,7 @@ def run_regression_search(
     else:
         raise ValueError(f"unknown generator: {generator!r}")
 
-    engine = ClassifyingSearchEngine(
+    engine = SearchEngine(
         problem=problem,
         generator=candidate,
         runner=runner,
@@ -314,15 +311,32 @@ def run_regression_search(
     (run_dir / "best_solution.py").write_text(
         result.best_code or "", encoding="utf-8"
     )
-    for attempt, outcome in sorted(engine.outcomes.items()):
-        run_root = outcome.run_result.run_root or outcome.run_result.run_dir
+    attempts = tuple(sorted(result.attempts, key=lambda item: item.attempt_id))
+    for outcome in attempts:
+        attempt = outcome.attempt_id
+        # Both Modeling runners are constructed above with run_layout="flat".
+        # Core's public outcome.run_dir is the artifact directory (Docker:
+        # <attempt>/output), while logs/code/run.json belong to the enclosing
+        # Modeling attempt root, so reconstruct that stable public tree here.
+        run_root = candidate_root / attempt
+        run_root.mkdir(parents=True, exist_ok=True)
+        for log_name in ("stdout.log", "stderr.log"):
+            (run_root / log_name).touch(exist_ok=True)
+        evidence = (
+            {
+                observation.name: observation.value
+                for observation in outcome.record.evidence
+            }
+            if outcome.record is not None
+            else None
+        )
         write_run_json(
             run_root,
             candidate=attempt,
-            status=outcome.status,
-            code_sha256=sha256_text(outcome.code),
+            status=outcome.status.value,
+            code_sha256=outcome.candidate_sha256,
             artifact_sha256=outcome.artifact_sha256,
-            evidence=outcome.evidence,
+            evidence=evidence,
             issues=outcome.issues,
             search_id=run_id,
         )
@@ -341,8 +355,8 @@ def run_regression_search(
         "best_mae": best_mae,
         "rejected": result.rejected,
         "candidates": [
-            {"candidate": attempt, "status": outcome.status}
-            for attempt, outcome in sorted(engine.outcomes.items())
+            {"candidate": outcome.attempt_id, "status": outcome.status.value}
+            for outcome in attempts
         ],
         "best_solution": "best_solution.py",
         "provenance": "provenance.json",
@@ -379,10 +393,11 @@ def run_regression_search(
         )
     best_attempt = next(
         (
-            attempt
-            for attempt, outcome in engine.outcomes.items()
-            if outcome.status == "verified"
-            and outcome.core_candidate_id == best_candidate_id
+            outcome.attempt_id
+            for outcome in attempts
+            if outcome.status.value == "verified"
+            and outcome.record is not None
+            and outcome.record.candidate_id == best_candidate_id
         ),
         None,
     )
@@ -442,8 +457,8 @@ def run_regression_search(
         run_dir=run_dir,
         records=tuple(result.records),
         candidates=tuple(
-            {"candidate": attempt, "status": outcome.status}
-            for attempt, outcome in sorted(engine.outcomes.items())
+            {"candidate": outcome.attempt_id, "status": outcome.status.value}
+            for outcome in attempts
         ),
         data_contract=contract.to_dict(),
     )

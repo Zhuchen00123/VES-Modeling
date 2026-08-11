@@ -10,9 +10,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from ves.search_engine import SearchEngine
 
 from ves_modeling.regression import capabilities, run_regression_search
-from ves_modeling.regression.diagnostics import ClassifyingSearchEngine
 from ves_modeling.regression.generator import MockRegressionGenerator
 from ves_modeling.regression.problem import build_regression_problem
 from ves_modeling.regression.provenance import file_hashes, sanitize_provider
@@ -112,8 +112,43 @@ def test_search_run_json_classifies_execution_failure(tmp_path: Path) -> None:
     } == expected
 
 
-def test_classifying_engine_records_all_statuses(tmp_path: Path) -> None:
-    """Application-layer diagnostics classify every rejection reason."""
+def test_core_runner_exception_persists_structured_attempt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Core catches runner exceptions; Modeling still persists its run tree."""
+    public, host = _make_data(tmp_path / "data")
+
+    def crash_run(self, code: str, run_id: str):
+        raise RuntimeError("runner unavailable")
+
+    monkeypatch.setattr(LocalRegressionRunner, "run", crash_run)
+    result = run_regression_search(
+        public,
+        host,
+        drafts=1,
+        improves=0,
+        workspace=tmp_path / "workspace",
+        fixture_dir=FIXTURES,
+    )
+    assert result.status == "no_verified"
+    assert result.rejected == 1
+    candidate = result.run_dir / "candidates" / "draft0"
+    assert (candidate / "stdout.log").is_file()
+    assert (candidate / "stderr.log").is_file()
+    run_json = json.loads(
+        (candidate / "run.json").read_text(encoding="utf-8")
+    )
+    assert run_json["status"] == "execution_failed"
+    assert "runner unavailable" in " ".join(run_json["issues"])
+    assert json.loads(
+        (result.run_dir / "summary.json").read_text(encoding="utf-8")
+    )["candidates"] == [
+        {"candidate": "draft0", "status": "execution_failed"}
+    ]
+
+
+def test_core_search_attempts_record_all_statuses(tmp_path: Path) -> None:
+    """Published Core outcomes classify every rejection reason."""
     public, host = _make_data(tmp_path / "data")
     fixtures = tmp_path / "fixtures"
     fixtures.mkdir()
@@ -156,16 +191,16 @@ def test_classifying_engine_records_all_statuses(tmp_path: Path) -> None:
         ),
         improves=(),
     )
-    engine = ClassifyingSearchEngine(
+    engine = SearchEngine(
         problem=problem,
         generator=generator,
         runner=runner,
         drafts=5,
         improves=0,
     )
-    engine.search()
+    result = engine.search()
     assert {
-        attempt: outcome.status for attempt, outcome in engine.outcomes.items()
+        outcome.attempt_id: outcome.status.value for outcome in result.attempts
     } == {
         "draft0": "execution_failed",
         "draft1": "artifact_missing",
@@ -173,8 +208,12 @@ def test_classifying_engine_records_all_statuses(tmp_path: Path) -> None:
         "draft3": "verified",
         "draft4": "timeout",
     }
-    assert engine.outcomes["draft3"].core_candidate_id
-    assert set(engine.outcomes["draft3"].evidence or {}) == {"rmse", "mae"}
+    verified = next(
+        outcome for outcome in result.attempts if outcome.attempt_id == "draft3"
+    )
+    assert verified.record is not None
+    assert verified.record.candidate_id
+    assert {item.name for item in verified.record.evidence} == {"rmse", "mae"}
 
 
 def test_summary_json_round_trip_no_core_objects(tmp_path: Path) -> None:
@@ -541,4 +580,12 @@ def test_capabilities_json_serializable() -> None:
     assert "run_regression_search" in payload["operations"]
     assert "apply_regression_solution" in payload["operations"]
     assert "verified" in payload["candidate_statuses"]
+    assert payload["candidate_statuses"] == [
+        "execution_failed",
+        "timeout",
+        "artifact_missing",
+        "artifact_invalid",
+        "verification_failed",
+        "verified",
+    ]
     assert payload["apply_statuses"] == ["produced_unverified"]
