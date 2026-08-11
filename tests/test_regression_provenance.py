@@ -167,7 +167,29 @@ def test_core_search_attempts_record_all_statuses(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     (fixtures / "good.py").write_text(
-        (FIXTURES / "linear_regression.py").read_text(encoding="utf-8"),
+        # Lightweight stdlib candidate (B-007): importing numpy/pandas/sklearn
+        # takes ~2.6s, which exceeded the 2.0s runner timeout and made draft3
+        # time out instead of verifying.  csv/json keep the five-status
+        # assertion stable without raising the timeout.
+        (
+            'import csv\n'
+            'import json\n'
+            'import os\n'
+            '\n'
+            'OUT_DIR = os.environ["REGRESSION_OUTPUT_DIR"]\n'
+            'features_path = os.path.join(\n'
+            '    os.environ["REGRESSION_DATA_DIR"], "test_features.csv"\n'
+            ')\n'
+            'with open(features_path, newline="", encoding="utf-8") as fh:\n'
+            '    count = sum(1 for _ in csv.reader(fh)) - 1\n'
+            'os.makedirs(OUT_DIR, exist_ok=True)\n'
+            'with open(\n'
+            '    os.path.join(OUT_DIR, "predictions.json"),\n'
+            '    "w",\n'
+            '    encoding="utf-8",\n'
+            ') as fh:\n'
+            '    json.dump({"predictions": [0.0] * count}, fh)\n'
+        ),
         encoding="utf-8",
     )
     (fixtures / "slow.py").write_text(
