@@ -18,9 +18,23 @@ Search improves candidate
 
 核心原则（继承 VES Core）：**AI can propose. It cannot grade itself.**
 
-## 第一版：Tabular Regression vertical slice
+## 支持的四类建模场景（R7.3–R10）
 
-完整闭环（真实运行，非演示字符串）：
+| Slice | 输入（candidate 可见） | Host 真值 | Verified 指标 | 稳定 API |
+|---|---|---|---|---|
+| **Regression** 回归 | `train.csv` / `test_features.csv` | `hidden_test_labels.csv` | rmse, mae | `run_regression_search` |
+| **Forecasting** 时间序列 | 多系列长表 + 可选外生变量 | 未来各步 hidden target | rmse, mae, smape | `run_forecasting_search` |
+| **Classification** 分类 | 特征 + 类别标签（公开顺序） | hidden 标签/类别 | accuracy, macro_f1, log_loss, auroc, brier, ece, confusion | `run_classification_search` |
+| **Optimization** 约束优化 | `problem.json`（完整公开实例） | 无（实例即完整真值） | 界/约束/整性违反 + objective | `run_optimization_search` |
+
+每个 slice 都有配套 `apply_*_solution`（无 host 真值时唯一成功状态
+`produced_unverified`，绝不伪造指标）与稳定 `capabilities()` JSON 能力声明
+（`API_SCHEMA_VERSION=1.0`）。跨 slice 公共契约与冻结决策见
+[`docs/multislice-contract.md`](docs/multislice-contract.md)。
+
+## Regression vertical slice 完整闭环
+
+真实运行，非演示字符串：
 
 ```text
 train.csv / test_features.csv / hidden_test_labels.csv
@@ -38,7 +52,7 @@ train.csv / test_features.csv / hidden_test_labels.csv
 ## 快速开始
 
 ```bash
-# 1. 依赖（Python >= 3.11；自动安装 PyPI VES Core）
+# 1. 依赖（Python >= 3.11；自动安装 PyPI VES Core + numpy/pandas/scikit-learn/scipy）
 pip install -e ".[dev]"
 
 # 2. 生成数据（固定 seed，可复现）
@@ -60,8 +74,8 @@ python examples/regression_demo.py --llm --drafts 2 --improves 3
 
 ## 稳定 Regression API（R7.2–R7.3）
 
-上层项目（VES-MathModeling-Skill 等）通过 `run_regression_search` 调用，
-不依赖 `examples/regression_demo.py`，也不需要理解 VES Core 内部类型。
+上层项目通过 `run_regression_search` 调用，不依赖 `examples/regression_demo.py`，
+也不需要理解 VES Core 内部类型。
 
 ```python
 from pathlib import Path
@@ -122,7 +136,38 @@ print(applied.to_summary()) # 无官方 labels 时绝不生成 RMSE/MAE
 - `capabilities()` 返回稳定的 JSON 能力声明；完整交付契约见
   [`docs/r7.3-delivery-contract.md`](docs/r7.3-delivery-contract.md)。
 
-## 进度（idea.md R0-R7）
+## 其余三个 slice 的稳定 API
+
+```python
+from ves_modeling.forecasting import run_forecasting_search
+from ves_modeling.classification import run_classification_search
+from ves_modeling.optimization import run_optimization_search
+
+# 时间序列：key 模式（series_id + 严格 ISO 时间戳）或 input 模式
+fc = run_forecasting_search(public_dir, host_dir, drafts=2, improves=3,
+                            workspace=Path("runs"), generator="mock",
+                            frequency="D", row_order="key")
+print(fc.status, fc.best_rmse, fc.best_mae, fc.best_smape)
+
+# 分类：host 固定类别顺序；candidate 输出 label + probabilities
+clf = run_classification_search(public_dir, host_dir, drafts=2, improves=3,
+                                workspace=Path("runs"), generator="mock",
+                                classes=["no", "yes"])
+print(clf.status, clf.best_macro_f1, clf.best_log_loss, clf.best_auroc)
+
+# 约束优化：problem.json 即完整实例，无 host 目录
+opt = run_optimization_search(public_dir, drafts=2, improves=3,
+                              workspace=Path("runs"), generator="mock")
+print(opt.status, opt.best_feasible, opt.best_objective)
+```
+
+各 slice 的 apply API（`apply_forecasting_solution` /
+`apply_classification_solution` / `apply_optimization_solution`）与 regression 同构：
+默认 Docker 执行、无 host 真值时状态为 `produced_unverified`；optimization 的 apply
+额外附 host 重算的可行性/目标事实（全局最优从不声称）。详见
+`docs/multislice-contract.md` 与各 slice 的 `capabilities()`。
+
+## 进度（idea.md R0-R10）
 
 - R0 Core 理解 ✅ `docs/ves-core-understanding.md`
 - R1 Regression Verifier ✅ `pytest tests/test_regression_verifier.py`
@@ -131,28 +176,36 @@ print(applied.to_summary()) # 无官方 labels 时绝不生成 RMSE/MAE
 - R4 LLM Generator ✅ fake-client 单测（`tests/test_llm_generator.py`，无需 API）
 - R5 Docker Execution ✅ `tests/test_docker_hidden_truth.py` 真实容器攻击
 - R6 Real Closed Loop ✅ 真实 LLM（deepseek-v4-flash / OpenCode Go / reasoning_effort=high / SSE 流式）+ 真实 Docker 闭环跑通：
-  `2 drafts + 3 improves` 全部 VERIFIED（rejected=0），BEST VERIFIED rmse=62.428 mae=47.177（run 3f9b78c1a9a6）；
-  配置 `VES_MODELING_LLM_BASE_URL/API_KEY/MODEL` 后跑 `python examples/regression_demo.py --llm --drafts 2 --improves 3`
-- R7.1 Cleanup ✅ B-005 运行日志落盘（stdout.log/stderr.log）、hidden labels finite 校验、
-  RegressionVerificationContext invariant、CI（GitHub Actions，Docker 测试独立 marker）
-- R7.2 Stable Regression API ✅ `ves_modeling.regression.run_regression_search`（见上）+ API 集成测试
-- R7.3 Regression delivery closure ✅ apply API、稳定 JSON 协议、provenance、统一 run 树、
-  结构化失败分类与显式 target/ID/row-order 数据契约；`122 passed`（含 Docker 安全测试）
+  `2 drafts + 3 improves` 全部 VERIFIED（rejected=0），BEST VERIFIED rmse=62.428 mae=47.177（run 3f9b78c1a9a6）
+- R7.1 Cleanup ✅ B-005 运行日志落盘、hidden labels finite 校验、context invariant、CI
+- R7.2 Stable Regression API ✅ `run_regression_search` + API 集成测试
+- R7.3 Regression delivery closure ✅ apply API、稳定 JSON 协议、provenance、统一 run 树、结构化失败、显式数据契约
+- R8 Forecasting ✅ key/input 双模式、真实 frequency 校验、严格 ISO 时间、rmse/mae/smape
+- R9 Classification ✅ label/prob 契约、host class order、六指标 + confusion、argmax tie-first
+- R10 Optimization ✅ 公开 problem.json、host 重算违反/目标、tol 1e-6、绝不声称全局最优
+- T-010 Suite ✅ 四 slice 集成测试、跨 slice 契约文档、本 README 概览
+
+当前全量测试：**non-Docker 196 passed / 13 deselected；Docker marker 13 passed**
+（Docker Desktop 真实容器 hidden-truth attack）。
 
 ## 目录
 
 ```text
-src/ves_modeling/regression/   API / apply / data contract / verifier / generator / runner
-fixtures/candidates/           可信手写候选 + 对抗候选（cheating_candidate.py）
-examples/regression_demo.py    --mock / --llm 入口
+src/ves_modeling/regression/     API / apply / data contract / verifier / generator / runner
+src/ves_modeling/forecasting/    R8 时间序列 slice（10 模块）
+src/ves_modeling/classification/ R9 分类 slice（10 模块）
+src/ves_modeling/optimization/   R10 约束优化 slice（10 模块）
+fixtures/candidates/             可信手写候选 + 对抗候选（cheating_candidate.py）
+fixtures/{forecasting,classification,optimization}/  各 slice 可信候选
+examples/regression_demo.py      --mock / --llm 入口
 scripts/generate_regression_data.py
-tests/                         verifier / problem / mock search / claim-ignored / docker hidden truth
-docs/                          ves-core-understanding / architecture / core-gaps
+tests/                           verifier / problem / mock search / claim-ignored / docker hidden truth / suite integration
+docs/                            ves-core-understanding / architecture / core-gaps / r7.3 contract / multislice-contract
 PyPI: verified-executable-search    VES Core v0.1.0（正式依赖）
 ```
 
 ## 安全
 
 - `LocalRegressionRunner` 只用于可信 fixture / 单元测试；真实 LLM candidate 必须走 `DockerRegressionRunner`。
-- Docker 隐藏真值攻击测试（`tests/test_docker_hidden_truth.py`）用真实容器验证 candidate 读不到 hidden labels。
+- Docker 隐藏真值攻击测试用真实容器验证 candidate 读不到 hidden labels（classification 同款；optimization 验证只读挂载 problem.json）。
 - 详见 `SECURITY.md`（VES Core）与 `docs/core-gaps.md`。
