@@ -64,6 +64,8 @@ pytest
 # 4. Mock 搜索（真 SearchEngine + 可信手写候选）
 python examples/regression_demo.py --mock
 
+> Demo 会在 `--root` 下生成 `data/` 与 `runs/` 目录（均已 gitignore，不入库）。
+
 # 5. 真实 LLM + Docker 闭环（需先构建沙箱镜像）
 bash scripts/build_runner_image.sh
 export VES_MODELING_LLM_BASE_URL=... VES_MODELING_LLM_API_KEY=... VES_MODELING_LLM_MODEL=...
@@ -185,7 +187,7 @@ print(opt.status, opt.best_feasible, opt.best_objective)
 - R10 Optimization ✅ 公开 problem.json、host 重算违反/目标、tol 1e-6、绝不声称全局最优
 - T-010 Suite ✅ 四 slice 集成测试、跨 slice 契约文档、本 README 概览
 
-当前全量测试：**non-Docker 196 passed / 13 deselected；Docker marker 13 passed**
+当前全量测试：**non-Docker 202 passed / 13 deselected；Docker marker 13 passed**
 （Docker Desktop 真实容器 hidden-truth attack）。
 
 ## 目录
