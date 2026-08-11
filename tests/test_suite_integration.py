@@ -1,8 +1,8 @@
 """T-010: four vertical slices coexist with a uniform, stable API shape.
 
 This suite is intentionally cross-cutting: it asserts the public contract of
-the whole package (regression / forecasting / classification / optimization)
-without re-running every per-slice behavior test.  It also guards the
+the whole package (regression / forecasting / classification / optimization /
+ODE) without re-running every per-slice behavior test.  It also guards the
 architecture rule that we do not introduce universal task/solver
 abstractions before repeated real-domain requirements exist.
 """
@@ -24,6 +24,8 @@ from ves_modeling.forecasting.problem import build_forecasting_problem
 from ves_modeling.forecasting.schema import (
     capabilities as forecasting_capabilities,
 )
+from ves_modeling.ode.problem import build_ode_problem
+from ves_modeling.ode.schema import capabilities as ode_capabilities
 from ves_modeling.optimization.problem import build_optimization_problem
 from ves_modeling.optimization.schema import (
     capabilities as optimization_capabilities,
@@ -38,13 +40,15 @@ ALL_CAPABILITIES = (
     forecasting_capabilities,
     classification_capabilities,
     optimization_capabilities,
+    ode_capabilities,
 )
 
 
-def test_top_level_exports_four_builders() -> None:
+def test_top_level_exports_all_builders() -> None:
     assert set(ves_modeling.__all__) == {
         "build_classification_problem",
         "build_forecasting_problem",
+        "build_ode_problem",
         "build_optimization_problem",
         "build_regression_problem",
     }
@@ -54,7 +58,7 @@ def test_top_level_exports_four_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 4
+    assert len(declared) == 5
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -204,6 +208,23 @@ def _write_optimization_problem(root: Path) -> Path:
     return public
 
 
+def _make_ode_data(root: Path) -> tuple[Path, Path]:
+    public = root / "public"
+    host = root / "host"
+    public.mkdir(parents=True)
+    host.mkdir(parents=True)
+    pd.DataFrame(
+        {"t": [float(i) for i in range(16)], "y": [float(i) for i in range(16)]}
+    ).to_csv(public / "train.csv", index=False)
+    pd.DataFrame({"t": [16.0, 17.0, 18.0]}).to_csv(
+        public / "test_features.csv", index=False
+    )
+    pd.DataFrame({"t": [16.0, 17.0, 18.0], "y": [16.0, 17.0, 18.0]}).to_csv(
+        host / "hidden_test_values.csv", index=False
+    )
+    return public, host
+
+
 def test_all_build_problems_constructible(tmp_path: Path) -> None:
     reg_public, reg_host = _make_regression_data(tmp_path / "reg")
     assert build_regression_problem(reg_public, reg_host) is not None
@@ -221,3 +242,6 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     opt_public = _write_optimization_problem(tmp_path / "opt")
     assert build_optimization_problem(opt_public) is not None
+
+    ode_public, ode_host = _make_ode_data(tmp_path / "ode")
+    assert build_ode_problem(ode_public, ode_host) is not None
