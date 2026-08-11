@@ -20,6 +20,8 @@ from ves_modeling.regression.runner import (
 
 IMAGE = os.environ.get("VES_MODELING_DOCKER_IMAGE", "ves-modeling-runner:0.1")
 
+pytestmark = pytest.mark.docker
+
 ATTACK_CANDIDATE = '''\
 import json, os
 found = {}

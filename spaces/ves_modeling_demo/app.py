@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 
 import matplotlib
+
 matplotlib.use("Agg")
+import gradio as gr
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -13,8 +15,6 @@ from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.model_selection import train_test_split
-
-import gradio as gr
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), "train.csv")
 MODELS = {

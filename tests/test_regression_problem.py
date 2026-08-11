@@ -5,8 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
+import pytest
 
-from ves_modeling.regression.problem import build_regression_problem
+from ves_modeling.regression.problem import (
+    build_regression_problem,
+    load_hidden_labels,
+)
 
 
 def test_problem_assembly(tmp_path: Path):
@@ -43,3 +48,35 @@ def test_context_fingerprint_is_one_way_and_sensitive(tmp_path: Path):
         format(int(v), "02x") for v in labels.astype(np.uint64)
     )
     assert problem.make_context().fingerprint() == fingerprint
+
+
+def test_build_problem_rejects_nan_labels(tmp_path: Path):
+    labels = np.array([1.0, np.nan, 3.0])
+    with pytest.raises(ValueError, match="hidden labels"):
+        build_regression_problem(tmp_path / "public", tmp_path / "host", labels=labels)
+
+
+def test_build_problem_rejects_inf_labels(tmp_path: Path):
+    labels = np.array([1.0, np.inf, 3.0])
+    with pytest.raises(ValueError, match="hidden labels"):
+        build_regression_problem(tmp_path / "public", tmp_path / "host", labels=labels)
+
+
+def test_load_hidden_labels_rejects_nan(tmp_path: Path):
+    host = tmp_path / "host"
+    host.mkdir()
+    pd.DataFrame({"target": [1.0, np.nan]}).to_csv(
+        host / "hidden_test_labels.csv", index=False
+    )
+    with pytest.raises(ValueError, match="hidden labels must be non-empty and finite"):
+        load_hidden_labels(host)
+
+
+def test_load_hidden_labels_rejects_inf(tmp_path: Path):
+    host = tmp_path / "host"
+    host.mkdir()
+    pd.DataFrame({"target": [1.0, np.inf]}).to_csv(
+        host / "hidden_test_labels.csv", index=False
+    )
+    with pytest.raises(ValueError, match="hidden labels must be non-empty and finite"):
+        load_hidden_labels(host)

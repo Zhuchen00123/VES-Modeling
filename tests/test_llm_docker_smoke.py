@@ -36,6 +36,8 @@ class FakeLlm:
 
 IMAGE = os.environ.get("VES_MODELING_DOCKER_IMAGE", "ves-modeling-runner:0.1")
 
+pytestmark = pytest.mark.docker
+
 
 def docker_ready() -> bool:
     import shutil

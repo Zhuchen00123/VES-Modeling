@@ -24,6 +24,14 @@ class RegressionVerificationContext(VerificationContext):
         expected_count: int | None = None,
     ) -> None:
         self._labels = np.asarray(hidden_labels, dtype=np.float64).reshape(-1)
+        if self._labels.size == 0:
+            raise ValueError("hidden labels must be non-empty")
+        if not np.isfinite(self._labels).all():
+            raise ValueError("hidden labels must be finite")
+        if expected_count is not None and expected_count <= 0:
+            raise ValueError("expected_count must be positive")
+        if expected_count is not None and expected_count != self._labels.size:
+            raise ValueError("expected_count must match hidden labels size")
         self._dataset_name = dataset_name
         self._expected_count = (
             int(self._labels.size) if expected_count is None else expected_count

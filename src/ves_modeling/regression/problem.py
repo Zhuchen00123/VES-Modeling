@@ -24,7 +24,7 @@ def load_hidden_labels(host_dir: Path) -> np.ndarray:
     if "target" not in frame.columns:
         raise ValueError(f"hidden labels CSV must have a 'target' column: {path}")
     labels = frame["target"].to_numpy(dtype=np.float64)
-    if labels.size == 0 or np.isnan(labels).any():
+    if labels.size == 0 or not np.isfinite(labels).all():
         raise ValueError("hidden labels must be non-empty and finite")
     return labels
 
@@ -61,6 +61,8 @@ def build_regression_problem(
     ``host_dir`` must never be exposed to candidates.
     """
     hidden = labels if labels is not None else load_hidden_labels(host_dir)
+    if hidden.size == 0 or not np.isfinite(hidden).all():
+        raise ValueError("hidden labels must be non-empty and finite")
     expected_count = int(hidden.size)
 
     def make_context() -> RegressionVerificationContext:

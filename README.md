@@ -43,7 +43,7 @@ pip install -e .vendor/Verified-Executable-Search
 pip install -e ".[dev]"
 
 # 2. 生成数据（固定 seed，可复现）
-python scripts/generate_regression_data.py   # 默认加州房价（20640 样本）
+python scripts/generate_regression_data.py
 
 # 3. 测试
 pytest
@@ -59,7 +59,33 @@ python examples/regression_demo.py --llm --drafts 2 --improves 3
 
 每次搜索在 `runs/<run-id>/` 保存 `summary.json`、`best_solution.py`、`config.json`（不保存 API key / 隐藏标签）。
 
-## 进度（idea.md R0-R6）
+## 稳定 Regression API（R7.2）
+
+上层项目（VES-MathModeling-Skill 等）通过 `run_regression_search` 调用，
+不依赖 `examples/regression_demo.py`，也不需要理解 VES Core 内部类型。
+
+```python
+from pathlib import Path
+
+from ves_modeling.regression import run_regression_search
+
+result = run_regression_search(
+    public_dir=Path("data/regression/public"),  # train.csv + test_features.csv（candidate 可见）
+    host_dir=Path("data/regression/host"),      # hidden_test_labels.csv（host 专属，绝不外泄）
+    drafts=2,
+    improves=3,
+    workspace=Path("runs"),
+    generator="mock",  # "mock"=可信夹具+本地 runner；"llm"=LLM generator+Docker runner
+)
+print(result.status, result.best_rmse, result.best_mae, result.rejected)
+```
+
+- `RegressionSearchResult` 字段：`status`（verified / no_verified）、`best_code`、
+  `best_evidence`、`best_rmse`、`best_mae`、`rejected`、`run_dir`、`records`
+- 每次搜索在 `runs/<run-id>/` 保存 `best_solution.py`、`summary.json`、`config.json`
+- 成绩全部来自宿主 verifier，从不采信 candidate 自报指标
+
+## 进度（idea.md R0-R7）
 
 - R0 Core 理解 ✅ `docs/ves-core-understanding.md`
 - R1 Regression Verifier ✅ `pytest tests/test_regression_verifier.py`
@@ -70,6 +96,9 @@ python examples/regression_demo.py --llm --drafts 2 --improves 3
 - R6 Real Closed Loop ✅ 真实 LLM（deepseek-v4-flash / OpenCode Go / reasoning_effort=high / SSE 流式）+ 真实 Docker 闭环跑通：
   `2 drafts + 3 improves` 全部 VERIFIED（rejected=0），BEST VERIFIED rmse=62.428 mae=47.177（run 3f9b78c1a9a6）；
   配置 `VES_MODELING_LLM_BASE_URL/API_KEY/MODEL` 后跑 `python examples/regression_demo.py --llm --drafts 2 --improves 3`
+- R7.1 Cleanup 进行中：B-005 运行日志落盘（stdout.log/stderr.log）、hidden labels finite 校验、
+  RegressionVerificationContext invariant、CI（GitHub Actions，Docker 测试独立 marker）
+- R7.2 Stable Regression API ✅ `ves_modeling.regression.run_regression_search`（见上）+ API 集成测试
 
 ## 目录
 

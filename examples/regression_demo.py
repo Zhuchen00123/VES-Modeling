@@ -8,24 +8,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import logging
-import uuid
 from pathlib import Path
 
-from ves.search import GreedyTop1Policy
-
-from ves_modeling.llm import OpenAICompatibleClient
-from ves_modeling.regression.generator import (
-    LLMRegressionGenerator,
-    MockRegressionGenerator,
-)
-from ves_modeling.regression.problem import build_regression_problem
-from ves_modeling.regression.runner import (
-    DockerRegressionRunner,
-    DockerRunnerConfig,
-    LocalRegressionRunner,
-)
+from ves_modeling.regression import run_regression_search
 
 logging.basicConfig(level=logging.WARNING)
 
@@ -63,38 +49,18 @@ def main() -> None:
 
     root = args.root.resolve()
     public_dir, host_dir = ensure_data(root)
-    problem = build_regression_problem(public_dir, host_dir)
     runs_dir = root / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
-    run_id = uuid.uuid4().hex[:12]
-
-    if args.mock:
-        generator = MockRegressionGenerator(root / "fixtures" / "candidates")
-        runner = LocalRegressionRunner(workspace=runs_dir, data_dir=public_dir)
-    else:
-        fallback = (root / "fixtures" / "candidates" / "linear_regression.py").read_text(
-            encoding="utf-8"
-        )
-        generator = LLMRegressionGenerator(
-            OpenAICompatibleClient(), fallback_code=fallback
-        )
-        runner = DockerRegressionRunner(
-            DockerRunnerConfig(
-                workspace=runs_dir, data_dir=public_dir, image=args.image
-            )
-        )
-
-    from ves.search_engine import SearchEngine
-
-    engine = SearchEngine(
-        problem=problem,
-        generator=generator,
-        runner=runner,
-        anchor_policy=GreedyTop1Policy(),
+    result = run_regression_search(
+        public_dir,
+        host_dir,
         drafts=args.drafts,
         improves=args.improves,
+        workspace=runs_dir,
+        generator="mock" if args.mock else "llm",
+        fixture_dir=root / "fixtures" / "candidates",
+        image=args.image,
     )
-    result = engine.search()
 
     print("VES Modeling")
     print("task: regression")
@@ -110,42 +76,11 @@ def main() -> None:
         print("BEST VERIFIED: none (all candidates rejected)")
     else:
         print("BEST VERIFIED")
-        print(f"candidate: {result.best_record.candidate_id[:8] if result.best_record else '?'}")
-        print(f"rmse: {observation(result.best_evidence, 'rmse'):.3f}")
-        print(f"mae: {observation(result.best_evidence, 'mae'):.3f}")
+        print(f"candidate: {result.best_candidate_id[:8] if result.best_candidate_id else '?'}")
+        print(f"rmse: {result.best_rmse:.3f}")
+        print(f"mae: {result.best_mae:.3f}")
         print(f"rejected: {result.rejected}")
-
-    # Save run artifacts (never API keys or hidden labels).
-    run_dir = runs_dir / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "best_solution.py").write_text(result.best_code or "", encoding="utf-8")
-    summary = {
-        "run_id": run_id,
-        "task": "regression",
-        "dataset": "regression",
-        "drafts": args.drafts,
-        "improves": args.improves,
-        "best_candidate_id": result.best_record.candidate_id if result.best_record else None,
-        "best_rmse": observation(result.best_evidence, "rmse") if result.best_evidence else None,
-        "best_mae": observation(result.best_evidence, "mae") if result.best_evidence else None,
-        "rejected": result.rejected,
-    }
-    (run_dir / "summary.json").write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
-    (run_dir / "config.json").write_text(
-        json.dumps(
-            {
-                "mock": args.mock,
-                "drafts": args.drafts,
-                "improves": args.improves,
-                "image": args.image,
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-    print(f"run artifacts: {run_dir}")
+    print(f"run artifacts: {result.run_dir}")
 
 
 if __name__ == "__main__":

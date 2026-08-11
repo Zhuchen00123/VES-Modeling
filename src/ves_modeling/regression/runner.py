@@ -49,6 +49,19 @@ def _prepare_run_dir(run_root: Path) -> Path:
     resolved.mkdir(parents=True, exist_ok=False)
     return resolved
 
+
+def _persist_logs(run_root: Path, stdout: str, stderr: str) -> None:
+    """Write full candidate stdout/stderr into the run root for diagnostics.
+
+    Local runs write them at ``runs/<run_id>/stdout.log`` and
+    ``runs/<run_id>/stderr.log``; Docker runs write them at
+    ``runs/<run_id>/`` (same level as ``code/`` and ``output/``).  Content is
+    persisted unfiltered even though ``RunResult`` truncates its copies.
+    """
+    run_root.mkdir(parents=True, exist_ok=True)
+    (run_root / "stdout.log").write_text(stdout, encoding="utf-8", errors="replace")
+    (run_root / "stderr.log").write_text(stderr, encoding="utf-8", errors="replace")
+
 def _normalize_docker_host_path(path: Path) -> Path:
     """Rewrite a /codexprojects prefix to its /mnt/f equivalent (VES pattern)."""
     s = str(path)
@@ -108,6 +121,7 @@ class LocalRegressionRunner:
             stderr = (error.stderr or "") + "\n<timed out>"
             returncode = None
 
+        _persist_logs(run_dir, stdout, stderr)
         return RunResult(
             succeeded=not timed_out and returncode == 0,
             run_dir=run_dir,
@@ -322,6 +336,7 @@ class DockerRegressionRunner:
             )
             returncode = -1
 
+        _persist_logs(run_root, stdout, stderr)
         return RunResult(
             succeeded=not timed_out and returncode == 0,
             run_dir=output_dir,

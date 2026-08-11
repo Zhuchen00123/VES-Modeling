@@ -38,7 +38,8 @@
 - **组件**：`ves_modeling/regression/runner.py` RunResult 有 stdout/stderr 字段，但 SearchEngine 只消费 succeeded/run_dir；demo 不打印失败候选的 stderr。
 - **影响**：draft0 这类"运行了但没产出"的候选，无法直接从 run 产物看出失败原因。
 - **建议修复**：runner 把 stdout/stderr 写入 `run_dir/run.log`（或 demo 对 rejected 候选打印 stderr 前 2000 字符）。
-- **状态**：✅ 已修复（`_prepare_run_dir` 在运行前清理陈旧 run_root，Local/Docker runner 均可复用 workspace）。
+- **状态**：✅ 已修复（Local/Docker runner 每次运行把完整 stdout/stderr 落盘到 run 目录
+  `stdout.log` / `stderr.log`；成功、失败、timeout 均保存；`_prepare_run_dir` 清理属 B-002 修复，与本条无关）。
 
 ## 注意事项（非 bug）
 - `Observation.value` 允许 NaN（只校验 uncertainty）；宿主 verifier 必须保证有限，`JudgeSpec` 可加 `Gate(finite)` 兜底——Modeling 已做。

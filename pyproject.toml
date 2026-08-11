@@ -26,6 +26,9 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [".", ".vendor/Verified-Executable-Search", "src"]
+markers = [
+    "docker: requires Docker daemon",
+]
 
 [tool.ruff]
 line-length = 88
