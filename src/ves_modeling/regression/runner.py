@@ -116,6 +116,8 @@ class LocalRegressionRunner:
         environment.setdefault("PYTHONHASHSEED", "0")
         environment["REGRESSION_DATA_DIR"] = str(self.data_dir)
         environment["REGRESSION_OUTPUT_DIR"] = str(run_dir)
+        environment["VES_DATA_DIR"] = str(self.data_dir)
+        environment["VES_OUTPUT_DIR"] = str(run_dir)
 
         timed_out = False
         try:
@@ -368,6 +370,10 @@ class DockerRegressionRunner:
                 "REGRESSION_DATA_DIR=/data",
                 "--env",
                 "REGRESSION_OUTPUT_DIR=/output",
+                "--env",
+                "VES_DATA_DIR=/data",
+                "--env",
+                "VES_OUTPUT_DIR=/output",
                 "--workdir",
                 "/output",
                 self.image_ref,
