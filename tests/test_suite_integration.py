@@ -3,10 +3,10 @@
 This suite is intentionally cross-cutting: it asserts the public contract of
 the whole package (regression / forecasting / classification / optimization /
 ODE / clustering / anomaly / graph / Monte Carlo / multi-objective /
-recommendation / probabilistic / queueing / association) without re-running
-every per-slice behavior test.  It also guards the architecture rule that we
-do not introduce universal task/solver abstractions before repeated real-domain
-requirements exist.
+recommendation / probabilistic / queueing / association / survival) without
+re-running every per-slice behavior test.  It also guards the architecture
+rule that we do not introduce universal task/solver abstractions before
+repeated real-domain requirements exist.
 """
 
 from __future__ import annotations
@@ -70,6 +70,10 @@ from ves_modeling.regression.problem import build_regression_problem
 from ves_modeling.regression.schema import (
     capabilities as regression_capabilities,
 )
+from ves_modeling.survival.problem import build_survival_problem
+from ves_modeling.survival.schema import (
+    capabilities as survival_capabilities,
+)
 
 ALL_CAPABILITIES = (
     association_capabilities,
@@ -86,6 +90,7 @@ ALL_CAPABILITIES = (
     recommendation_capabilities,
     probabilistic_capabilities,
     queueing_capabilities,
+    survival_capabilities,
 )
 
 
@@ -105,6 +110,7 @@ def test_top_level_exports_all_builders() -> None:
         "build_queueing_problem",
         "build_recommendation_problem",
         "build_regression_problem",
+        "build_survival_problem",
     }
     for name in ves_modeling.__all__:
         assert callable(getattr(ves_modeling, name))
@@ -112,7 +118,7 @@ def test_top_level_exports_all_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 14
+    assert len(declared) == 15
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -474,6 +480,28 @@ def _make_association_data(root: Path) -> tuple[Path, Path]:
     return public, host
 
 
+def _make_survival_data(root: Path) -> tuple[Path, Path]:
+    public = root / "public"
+    host = root / "host"
+    public.mkdir(parents=True)
+    host.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "f0": [0.0, 1.0, 2.0, 3.0],
+            "f1": [1.0, 1.0, 1.0, 1.0],
+            "time": [10.0, 12.0, 14.0, 16.0],
+            "event": [1, 0, 1, 1],
+        }
+    ).to_csv(public / "train.csv", index=False)
+    pd.DataFrame(
+        {"f0": [1.0, 2.0], "f1": [1.0, 1.0]}
+    ).to_csv(public / "test_features.csv", index=False)
+    pd.DataFrame(
+        {"time": [11.0, 13.0], "event": [1, 1]}
+    ).to_csv(host / "hidden_test_outcomes.csv", index=False)
+    return public, host
+
+
 def test_all_build_problems_constructible(tmp_path: Path) -> None:
     reg_public, reg_host = _make_regression_data(tmp_path / "reg")
     assert build_regression_problem(reg_public, reg_host) is not None
@@ -521,3 +549,6 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     assoc_public, assoc_host = _make_association_data(tmp_path / "assoc")
     assert build_association_problem(assoc_public, assoc_host) is not None
+
+    surv_public, surv_host = _make_survival_data(tmp_path / "surv")
+    assert build_survival_problem(surv_public, surv_host) is not None
