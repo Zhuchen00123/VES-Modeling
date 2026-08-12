@@ -2,9 +2,9 @@
 
 This suite is intentionally cross-cutting: it asserts the public contract of
 the whole package (regression / forecasting / classification / optimization /
-ODE / clustering) without re-running every per-slice behavior test.  It also
-guards the architecture rule that we do not introduce universal task/solver
-abstractions before repeated real-domain requirements exist.
+ODE / clustering / anomaly) without re-running every per-slice behavior test.
+It also guards the architecture rule that we do not introduce universal
+task/solver abstractions before repeated real-domain requirements exist.
 """
 
 from __future__ import annotations
@@ -16,6 +16,10 @@ import numpy as np
 import pandas as pd
 
 import ves_modeling
+from ves_modeling.anomaly.problem import build_anomaly_problem
+from ves_modeling.anomaly.schema import (
+    capabilities as anomaly_capabilities,
+)
 from ves_modeling.classification.problem import build_classification_problem
 from ves_modeling.classification.schema import (
     capabilities as classification_capabilities,
@@ -46,11 +50,13 @@ ALL_CAPABILITIES = (
     clustering_capabilities,
     optimization_capabilities,
     ode_capabilities,
+    anomaly_capabilities,
 )
 
 
 def test_top_level_exports_all_builders() -> None:
     assert set(ves_modeling.__all__) == {
+        "build_anomaly_problem",
         "build_classification_problem",
         "build_clustering_problem",
         "build_forecasting_problem",
@@ -64,7 +70,7 @@ def test_top_level_exports_all_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 6
+    assert len(declared) == 7
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -254,6 +260,26 @@ def _make_clustering_data(root: Path) -> tuple[Path, Path]:
     return public, host
 
 
+def _make_anomaly_data(root: Path) -> tuple[Path, Path]:
+    public = root / "public"
+    host = root / "host"
+    public.mkdir(parents=True)
+    host.mkdir(parents=True)
+    rng = np.random.default_rng(5)
+    pd.DataFrame(
+        rng.normal(0.0, 1.0, size=(50, 2)),
+        columns=["f0", "f1"],
+    ).to_csv(public / "train.csv", index=False)
+    pd.DataFrame(
+        rng.normal(0.0, 1.0, size=(10, 2)),
+        columns=["f0", "f1"],
+    ).to_csv(public / "test_features.csv", index=False)
+    pd.DataFrame({"label": ["normal"] * 8 + ["anomaly"] * 2}).to_csv(
+        host / "hidden_test_labels.csv", index=False
+    )
+    return public, host
+
+
 def test_all_build_problems_constructible(tmp_path: Path) -> None:
     reg_public, reg_host = _make_regression_data(tmp_path / "reg")
     assert build_regression_problem(reg_public, reg_host) is not None
@@ -277,3 +303,6 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     clu_public, clu_host = _make_clustering_data(tmp_path / "clu")
     assert build_clustering_problem(clu_public, clu_host) is not None
+
+    anom_public, anom_host = _make_anomaly_data(tmp_path / "anom")
+    assert build_anomaly_problem(anom_public, anom_host) is not None
