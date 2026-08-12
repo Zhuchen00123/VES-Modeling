@@ -4,8 +4,8 @@ This suite is intentionally cross-cutting: it asserts the public contract of
 the whole package (regression / forecasting / classification / optimization /
 ODE / clustering / anomaly / graph / Monte Carlo / multi-objective /
 recommendation / probabilistic / queueing / association / survival /
-assignment / markov / binpacking / changepoint) without re-running every
-per-slice behavior test.  It
+assignment / markov / binpacking / changepoint / lqr) without re-running
+every per-slice behavior test.  It
 also guards the architecture rule that we do not introduce universal
 task/solver abstractions before repeated real-domain requirements exist.
 """
@@ -53,6 +53,8 @@ from ves_modeling.forecasting.schema import (
 )
 from ves_modeling.graph.problem import build_graph_problem
 from ves_modeling.graph.schema import capabilities as graph_capabilities
+from ves_modeling.lqr.problem import build_lqr_problem
+from ves_modeling.lqr.schema import capabilities as lqr_capabilities
 from ves_modeling.markov.problem import build_markov_problem
 from ves_modeling.markov.schema import capabilities as markov_capabilities
 from ves_modeling.montecarlo.problem import build_montecarlo_problem
@@ -103,6 +105,7 @@ ALL_CAPABILITIES = (
     ode_capabilities,
     anomaly_capabilities,
     graph_capabilities,
+    lqr_capabilities,
     markov_capabilities,
     montecarlo_capabilities,
     multiobjective_capabilities,
@@ -124,6 +127,7 @@ def test_top_level_exports_all_builders() -> None:
         "build_clustering_problem",
         "build_forecasting_problem",
         "build_graph_problem",
+        "build_lqr_problem",
         "build_markov_problem",
         "build_montecarlo_problem",
         "build_multiobjective_problem",
@@ -141,7 +145,7 @@ def test_top_level_exports_all_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 19
+    assert len(declared) == 20
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -581,6 +585,26 @@ def _write_changepoint_data(root: Path) -> tuple[Path, Path]:
     return public, host
 
 
+def _write_lqr_problem(root: Path) -> Path:
+    public = root / "public"
+    public.mkdir(parents=True)
+    (public / "problem.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "A": [[1.0]],
+                "B": [[1.0]],
+                "Q": [[1.0]],
+                "R": [[1.0]],
+                "x0": [1.0],
+                "horizon": 2,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return public
+
+
 def _make_markov_data(root: Path) -> tuple[Path, Path]:
     public = root / "public"
     host = root / "host"
@@ -673,3 +697,6 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     cp_public, cp_host = _write_changepoint_data(tmp_path / "cp")
     assert build_changepoint_problem(cp_public, cp_host) is not None
+
+    lqr_public = _write_lqr_problem(tmp_path / "lqr")
+    assert build_lqr_problem(lqr_public) is not None
