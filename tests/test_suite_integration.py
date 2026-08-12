@@ -2,10 +2,10 @@
 
 This suite is intentionally cross-cutting: it asserts the public contract of
 the whole package (regression / forecasting / classification / optimization /
-ODE / clustering / anomaly / graph) without re-running every per-slice
-behavior test.  It also guards the architecture rule that we do not introduce
-universal task/solver abstractions before repeated real-domain requirements
-exist.
+ODE / clustering / anomaly / graph / Monte Carlo) without re-running every
+per-slice behavior test.  It also guards the architecture rule that we do not
+introduce universal task/solver abstractions before repeated real-domain
+requirements exist.
 """
 
 from __future__ import annotations
@@ -35,6 +35,10 @@ from ves_modeling.forecasting.schema import (
 )
 from ves_modeling.graph.problem import build_graph_problem
 from ves_modeling.graph.schema import capabilities as graph_capabilities
+from ves_modeling.montecarlo.problem import build_montecarlo_problem
+from ves_modeling.montecarlo.schema import (
+    capabilities as montecarlo_capabilities,
+)
 from ves_modeling.ode.problem import build_ode_problem
 from ves_modeling.ode.schema import capabilities as ode_capabilities
 from ves_modeling.optimization.problem import build_optimization_problem
@@ -55,6 +59,7 @@ ALL_CAPABILITIES = (
     ode_capabilities,
     anomaly_capabilities,
     graph_capabilities,
+    montecarlo_capabilities,
 )
 
 
@@ -65,6 +70,7 @@ def test_top_level_exports_all_builders() -> None:
         "build_clustering_problem",
         "build_forecasting_problem",
         "build_graph_problem",
+        "build_montecarlo_problem",
         "build_ode_problem",
         "build_optimization_problem",
         "build_regression_problem",
@@ -75,7 +81,7 @@ def test_top_level_exports_all_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 8
+    assert len(declared) == 9
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -306,6 +312,26 @@ def _write_graph_problem(root: Path) -> Path:
     return public
 
 
+def _write_montecarlo_problem(root: Path) -> Path:
+    public = root / "public"
+    public.mkdir(parents=True)
+    (public / "problem.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "kind": "expectation",
+                "params": {
+                    "outcomes": [0.0, 1.0],
+                    "probabilities": [0.5, 0.5],
+                    "target": "mean",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return public
+
+
 def test_all_build_problems_constructible(tmp_path: Path) -> None:
     reg_public, reg_host = _make_regression_data(tmp_path / "reg")
     assert build_regression_problem(reg_public, reg_host) is not None
@@ -335,3 +361,6 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     graph_public = _write_graph_problem(tmp_path / "graph")
     assert build_graph_problem(graph_public) is not None
+
+    mc_public = _write_montecarlo_problem(tmp_path / "mc")
+    assert build_montecarlo_problem(mc_public) is not None
