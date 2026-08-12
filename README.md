@@ -18,7 +18,7 @@ Search improves candidate
 
 核心原则（继承 VES Core）：**AI can propose. It cannot grade itself.**
 
-## 支持的十类建模场景（R7.3–R16）
+## 支持的十三类建模场景（R7.3–R19）
 
 | Slice | 输入（candidate 可见） | Host 真值 | Verified 指标 | 稳定 API |
 |---|---|---|---|---|
@@ -32,6 +32,9 @@ Search improves candidate
 | **Graph** 图论 | `problem.json`（图完整实例） | 无（实例即完整真值） | 路径/流量/树总权重 + 违反残差 | `run_graph_search` |
 | **Monte Carlo** 随机模拟 | `problem.json`（随机问题定义） | 无（host 持解析真值） | 相对/绝对误差 + CI 覆盖 | `run_montecarlo_search` |
 | **Multi-objective** 多目标优化 | `problem.json`（双目标完整实例） | 无（实例即完整真值） | hypervolume(2D) + 支配计数 | `run_multiobjective_search` |
+| **Recommendation** 推荐系统 | user-item 评分历史 + 待预测对 | `hidden_test_ratings.csv` | rmse, mae, ndcg@5(审计) | `run_recommendation_search` |
+| **Probabilistic** 概率推断 | `problem.json`(分布族) + 观测样本 | `hidden_parameters.json`（真参数） | 相对/绝对误差 + CI 覆盖 | `run_probabilistic_search` |
+| **Queueing** 排队论 | `problem.json`（排队系统定义） | 无（host 持解析公式真值） | 相对/绝对误差 + CI 覆盖 | `run_queueing_search` |
 
 每个 slice 都有配套 `apply_*_solution`（无 host 真值时唯一成功状态
 `produced_unverified`，绝不伪造指标）与稳定 `capabilities()` JSON 能力声明
@@ -144,7 +147,7 @@ print(applied.to_summary()) # 无官方 labels 时绝不生成 RMSE/MAE
 - `capabilities()` 返回稳定的 JSON 能力声明；完整交付契约见
   [`docs/r7.3-delivery-contract.md`](docs/r7.3-delivery-contract.md)。
 
-## 其余九个 slice 的稳定 API
+## 其余十二个 slice 的稳定 API
 
 ```python
 from ves_modeling.forecasting import run_forecasting_search
@@ -156,6 +159,9 @@ from ves_modeling.anomaly import run_anomaly_search
 from ves_modeling.graph import run_graph_search
 from ves_modeling.montecarlo import run_montecarlo_search
 from ves_modeling.multiobjective import run_multiobjective_search
+from ves_modeling.recommendation import run_recommendation_search
+from ves_modeling.probabilistic import run_probabilistic_search
+from ves_modeling.queueing import run_queueing_search
 
 # 时间序列：key 模式（series_id + 严格 ISO 时间戳）或 input 模式
 fc = run_forecasting_search(public_dir, host_dir, drafts=2, improves=3,
@@ -204,13 +210,29 @@ print(mc.status, mc.best_relative_error, mc.best_absolute_error)
 moo = run_multiobjective_search(public_dir, drafts=2, improves=3,
                                 workspace=Path("runs"), generator="mock")
 print(moo.status, moo.best_hypervolume, moo.best_non_dominated_count)
+
+# 推荐系统：user-item 评分预测，host 隐藏评分 + NDCG@5 审计
+rec = run_recommendation_search(public_dir, host_dir, drafts=2, improves=3,
+                                workspace=Path("runs"), generator="mock")
+print(rec.status, rec.best_rmse, rec.best_mae, rec.best_ndcg)
+
+# 概率推断：从观测样本估计分布参数，host 持真参数
+prob = run_probabilistic_search(public_dir, host_dir, drafts=2, improves=3,
+                                workspace=Path("runs"), generator="mock")
+print(prob.status, prob.best_relative_error, prob.best_absolute_error)
+
+# 排队论：M/M/1 或 M/M/c 仿真估计，host 持解析公式真值
+que = run_queueing_search(public_dir, drafts=2, improves=3,
+                          workspace=Path("runs"), generator="mock")
+print(que.status, que.best_relative_error, que.best_absolute_error)
 ```
 
 各 slice 的 apply API（`apply_forecasting_solution` /
 `apply_classification_solution` / `apply_optimization_solution` / `apply_ode_solution` /
 `apply_clustering_solution` / `apply_anomaly_solution` /
 `apply_graph_solution` / `apply_montecarlo_solution` /
-`apply_multiobjective_solution`）与 regression 同构：
+`apply_multiobjective_solution` / `apply_recommendation_solution` /
+`apply_probabilistic_solution` / `apply_queueing_solution`）与 regression 同构：
 默认 Docker 执行、无 host 真值时状态为 `produced_unverified`；optimization 的 apply
 额外附 host 重算的可行性/目标事实（全局最优从不声称）。详见
 `docs/multislice-contract.md` 与各 slice 的 `capabilities()`。
@@ -237,9 +259,12 @@ print(moo.status, moo.best_hypervolume, moo.best_non_dominated_count)
 - R14 Graph ✅ 最短路/最大流/最小生成树、纯 Python Mock、host 重算权重/流量+可行性
 - R15 Monte Carlo ✅ expectation/integral/probability 三 kind 解析真值、relative/absolute error、CI 审计
 - R16 Multi-objective ✅ 双目标 Pareto、hypervolume 2D 精确、随机权重标量化 Mock
+- R17 Recommendation ✅ user-item 评分预测、rmse/mae/ndcg@5 审计、偏差基线+SVD Mock
+- R18 Probabilistic ✅ normal/gamma/beta 参数估计、host 真参数、MLE+bootstrap CI Mock
+- R19 Queueing ✅ M/M/1 与 M/M/c、解析公式真值、离散事件仿真 Mock
 - T-010 Suite ✅ 四 slice 集成测试、跨 slice 契约文档、本 README 概览
 
-当前全量测试：**non-Docker 306 passed / 25 deselected；Docker marker 25 passed**
+当前全量测试：**non-Docker 348 passed / 31 deselected；Docker marker 31 passed**
 （Docker Desktop 真实容器 hidden-truth attack）。
 
 ## 目录
@@ -255,8 +280,11 @@ src/ves_modeling/anomaly/      R13 异常检测 slice（10 模块）
 src/ves_modeling/graph/        R14 图论 slice（10 模块）
 src/ves_modeling/montecarlo/   R15 随机模拟 slice（10 模块）
 src/ves_modeling/multiobjective/ R16 多目标优化 slice（10 模块）
+src/ves_modeling/recommendation/ R17 推荐系统 slice（10 模块）
+src/ves_modeling/probabilistic/  R18 概率推断 slice（10 模块）
+src/ves_modeling/queueing/       R19 排队论 slice（10 模块）
 fixtures/candidates/             可信手写候选 + 对抗候选（cheating_candidate.py）
-fixtures/{forecasting,classification,optimization,ode,clustering,anomaly,graph,montecarlo,multiobjective}/  各 slice 可信候选
+fixtures/{forecasting,classification,optimization,ode,clustering,anomaly,graph,montecarlo,multiobjective,recommendation,probabilistic,queueing}/  各 slice 可信候选
 examples/regression_demo.py      --mock / --llm 入口
 scripts/generate_regression_data.py
 tests/                           verifier / problem / mock search / claim-ignored / docker hidden truth / suite integration

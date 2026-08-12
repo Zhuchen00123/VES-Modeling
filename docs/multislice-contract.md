@@ -2,7 +2,8 @@
 
 This document is the cross-cutting public contract for the six vertical
 slices (regression, forecasting, classification, optimization, ODE,
-clustering, anomaly detection, graph, Monte Carlo, multi-objective).  Per-slice behavior contracts live in each slice's data
+clustering, anomaly detection, graph, Monte Carlo, multi-objective,
+recommendation, probabilistic inference, queueing).  Per-slice behavior contracts live in each slice's data
 contract module; this page records the shared decisions and the frozen
 API naming used by all slices.
 
@@ -20,6 +21,9 @@ API naming used by all slices.
 | Graph | `build_graph_problem` | `run_graph_search` | `apply_graph_solution` | `total_weight`/`total_value` + violations (`shortest_path`/`max_flow`/`min_spanning_tree`) |
 | Monte Carlo | `build_montecarlo_problem` | `run_montecarlo_search` | `apply_montecarlo_solution` | `absolute_error`, `relative_error`, `ci_coverage` (audit) |
 | Multi-objective | `build_multiobjective_problem` | `run_multiobjective_search` | `apply_multiobjective_solution` | `hypervolume` (2D exact) + dominance counts |
+| Recommendation | `build_recommendation_problem` | `run_recommendation_search` | `apply_recommendation_solution` | `rmse`, `mae`, `ndcg@5` (audit) |
+| Probabilistic | `build_probabilistic_problem` | `run_probabilistic_search` | `apply_probabilistic_solution` | `absolute_error`, `relative_error`, `ci_coverage` (audit) |
+| Queueing | `build_queueing_problem` | `run_queueing_search` | `apply_queueing_solution` | `absolute_error`, `relative_error`, `ci_coverage` (audit) |
 
 Every slice declares `API_SCHEMA_VERSION = "1.0"` and distinguishes itself
 through `capabilities()["operations"]`; the version is shared because the
@@ -84,6 +88,12 @@ would be speculative API until a real workflow needs it.
   (invalid paths/flow/trees are rejected before verification); the violation
   observations (`path_violation`, `tree_violation`, capacity/conservation
   residuals) are audit fields kept in the evidence for transparency.
+- Queueing `prob_wait_gt` and `mean_wait` refer to *queueing* wait
+  (time in queue, excluding service).  M/M/1 references use the closed forms
+  and M/M/c uses Erlang-C; the analytic reference is host-held and never
+  public.
+- Recommendation `ndcg@5` is an audit observation; input mode carries no
+  user keys so it is always 1.0 there (see per-slice capabilities).
 - Replay requires an absolute `PYTHONPATH` (`.deps:src:...`); relative paths
   fail under `LocalRegressionRunner` because the child process changes its
   working directory to the run directory.

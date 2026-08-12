@@ -3,8 +3,8 @@
 This suite is intentionally cross-cutting: it asserts the public contract of
 the whole package (regression / forecasting / classification / optimization /
 ODE / clustering / anomaly / graph / Monte Carlo / multi-objective /
-recommendation / probabilistic) without re-running every per-slice behavior
-test.  It also guards the architecture rule that we do not introduce
+recommendation / probabilistic / queueing) without re-running every per-slice
+behavior test.  It also guards the architecture rule that we do not introduce
 universal task/solver abstractions before repeated real-domain requirements
 exist.
 """
@@ -54,6 +54,10 @@ from ves_modeling.probabilistic.problem import build_probabilistic_problem
 from ves_modeling.probabilistic.schema import (
     capabilities as probabilistic_capabilities,
 )
+from ves_modeling.queueing.problem import build_queueing_problem
+from ves_modeling.queueing.schema import (
+    capabilities as queueing_capabilities,
+)
 from ves_modeling.recommendation.problem import build_recommendation_problem
 from ves_modeling.recommendation.schema import (
     capabilities as recommendation_capabilities,
@@ -76,6 +80,7 @@ ALL_CAPABILITIES = (
     multiobjective_capabilities,
     recommendation_capabilities,
     probabilistic_capabilities,
+    queueing_capabilities,
 )
 
 
@@ -91,6 +96,7 @@ def test_top_level_exports_all_builders() -> None:
         "build_ode_problem",
         "build_optimization_problem",
         "build_probabilistic_problem",
+        "build_queueing_problem",
         "build_recommendation_problem",
         "build_regression_problem",
     }
@@ -100,7 +106,7 @@ def test_top_level_exports_all_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 12
+    assert len(declared) == 13
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -427,6 +433,24 @@ def _make_probabilistic_data(root: Path) -> tuple[Path, Path]:
     return public, host
 
 
+def _write_queueing_problem(root: Path) -> Path:
+    public = root / "public"
+    public.mkdir(parents=True)
+    (public / "problem.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "kind": "mm1",
+                "lambda": 2.0,
+                "mu": 4.0,
+                "quantity": "mean_wait",
+            }
+        ),
+        encoding="utf-8",
+    )
+    return public
+
+
 def test_all_build_problems_constructible(tmp_path: Path) -> None:
     reg_public, reg_host = _make_regression_data(tmp_path / "reg")
     assert build_regression_problem(reg_public, reg_host) is not None
@@ -468,3 +492,6 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     prob_public, prob_host = _make_probabilistic_data(tmp_path / "prob")
     assert build_probabilistic_problem(prob_public, prob_host) is not None
+
+    queue_public = _write_queueing_problem(tmp_path / "queue")
+    assert build_queueing_problem(queue_public) is not None

@@ -10,6 +10,7 @@ from ves_modeling.multiobjective.problem import build_multiobjective_problem
 from ves_modeling.ode.problem import build_ode_problem
 from ves_modeling.optimization.problem import build_optimization_problem
 from ves_modeling.probabilistic.problem import build_probabilistic_problem
+from ves_modeling.queueing.problem import build_queueing_problem
 from ves_modeling.recommendation.problem import build_recommendation_problem
 from ves_modeling.regression.problem import build_regression_problem
 
@@ -24,6 +25,7 @@ __all__ = [
     "build_ode_problem",
     "build_optimization_problem",
     "build_probabilistic_problem",
+    "build_queueing_problem",
     "build_recommendation_problem",
     "build_regression_problem",
 ]
