@@ -2,8 +2,8 @@
 
 This suite is intentionally cross-cutting: it asserts the public contract of
 the whole package (regression / forecasting / classification / optimization /
-ODE) without re-running every per-slice behavior test.  It also guards the
-architecture rule that we do not introduce universal task/solver
+ODE / clustering) without re-running every per-slice behavior test.  It also
+guards the architecture rule that we do not introduce universal task/solver
 abstractions before repeated real-domain requirements exist.
 """
 
@@ -19,6 +19,10 @@ import ves_modeling
 from ves_modeling.classification.problem import build_classification_problem
 from ves_modeling.classification.schema import (
     capabilities as classification_capabilities,
+)
+from ves_modeling.clustering.problem import build_clustering_problem
+from ves_modeling.clustering.schema import (
+    capabilities as clustering_capabilities,
 )
 from ves_modeling.forecasting.problem import build_forecasting_problem
 from ves_modeling.forecasting.schema import (
@@ -39,6 +43,7 @@ ALL_CAPABILITIES = (
     regression_capabilities,
     forecasting_capabilities,
     classification_capabilities,
+    clustering_capabilities,
     optimization_capabilities,
     ode_capabilities,
 )
@@ -47,6 +52,7 @@ ALL_CAPABILITIES = (
 def test_top_level_exports_all_builders() -> None:
     assert set(ves_modeling.__all__) == {
         "build_classification_problem",
+        "build_clustering_problem",
         "build_forecasting_problem",
         "build_ode_problem",
         "build_optimization_problem",
@@ -58,7 +64,7 @@ def test_top_level_exports_all_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 5
+    assert len(declared) == 6
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -225,6 +231,29 @@ def _make_ode_data(root: Path) -> tuple[Path, Path]:
     return public, host
 
 
+def _make_clustering_data(root: Path) -> tuple[Path, Path]:
+    public = root / "public"
+    host = root / "host"
+    public.mkdir(parents=True)
+    host.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "f0": [0.0, 0.1, 1.0, 1.1, 2.0, 2.1],
+            "f1": [0.0, 0.1, 1.0, 1.1, 2.0, 2.1],
+        }
+    ).to_csv(public / "train.csv", index=False)
+    pd.DataFrame(
+        {
+            "f0": [0.2, 1.2, 2.2],
+            "f1": [0.2, 1.2, 2.2],
+        }
+    ).to_csv(public / "test_features.csv", index=False)
+    pd.DataFrame({"label": ["a", "b", "a"]}).to_csv(
+        host / "hidden_test_labels.csv", index=False
+    )
+    return public, host
+
+
 def test_all_build_problems_constructible(tmp_path: Path) -> None:
     reg_public, reg_host = _make_regression_data(tmp_path / "reg")
     assert build_regression_problem(reg_public, reg_host) is not None
@@ -245,3 +274,6 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     ode_public, ode_host = _make_ode_data(tmp_path / "ode")
     assert build_ode_problem(ode_public, ode_host) is not None
+
+    clu_public, clu_host = _make_clustering_data(tmp_path / "clu")
+    assert build_clustering_problem(clu_public, clu_host) is not None

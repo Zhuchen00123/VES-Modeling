@@ -1,9 +1,10 @@
 # VES Modeling multi-slice contract (T-010)
 
-This document is the cross-cutting public contract for the four vertical
-slices (regression, forecasting, classification, optimization).  Per-slice
-behavior contracts live in each slice's data contract module; this page
-records the shared decisions and the frozen API naming used by all slices.
+This document is the cross-cutting public contract for the six vertical
+slices (regression, forecasting, classification, optimization, ODE,
+clustering).  Per-slice behavior contracts live in each slice's data
+contract module; this page records the shared decisions and the frozen
+API naming used by all slices.
 
 ## Slices and stable entry points
 
@@ -13,6 +14,8 @@ records the shared decisions and the frozen API naming used by all slices.
 | Forecasting | `build_forecasting_problem` | `run_forecasting_search` | `apply_forecasting_solution` | `rmse`, `mae`, `smape` |
 | Classification | `build_classification_problem` | `run_classification_search` | `apply_classification_solution` | `accuracy`, `macro_f1`, `log_loss`, `auroc`, `multiclass_brier`, `calibration_ece`, `confusion_*` |
 | Optimization | `build_optimization_problem` | `run_optimization_search` | `apply_optimization_solution` | `max_bound_violation`, `max_constraint_violation`, `integrality_violation`, `objective` |
+| ODE | `build_ode_problem` | `run_ode_search` | `apply_ode_solution` | `rmse`, `mae` (on hidden (t, y) points) |
+| Clustering | `build_clustering_problem` | `run_clustering_search` | `apply_clustering_solution` | `ari`, `nmi`, `v_measure`, `silhouette` (optional) |
 
 Every slice declares `API_SCHEMA_VERSION = "1.0"` and distinguishes itself
 through `capabilities()["operations"]`; the version is shared because the
@@ -63,6 +66,11 @@ would be speculative API until a real workflow needs it.
 - Optimization `best_solution.py` may still be written when `best_code`
   exists but the host judged it infeasible; the `status` field expresses this
   (`rejected` / `no_verified`), same as regression behavior.
+- Clustering `silhouette` is computed on the public `test_features.csv`
+  with the candidate's labels when computable (>=2 clusters and enough
+  samples); otherwise it falls back to `0.0` and never blocks verification.
+  ARI/NMI/V-measure are permutation-invariant, so candidate cluster names
+  never need to match host reference names.
 - Replay requires an absolute `PYTHONPATH` (`.deps:src:...`); relative paths
   fail under `LocalRegressionRunner` because the child process changes its
   working directory to the run directory.
