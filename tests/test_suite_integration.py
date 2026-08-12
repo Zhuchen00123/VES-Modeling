@@ -3,10 +3,10 @@
 This suite is intentionally cross-cutting: it asserts the public contract of
 the whole package (regression / forecasting / classification / optimization /
 ODE / clustering / anomaly / graph / Monte Carlo / multi-objective /
-recommendation / probabilistic / queueing) without re-running every per-slice
-behavior test.  It also guards the architecture rule that we do not introduce
-universal task/solver abstractions before repeated real-domain requirements
-exist.
+recommendation / probabilistic / queueing / association) without re-running
+every per-slice behavior test.  It also guards the architecture rule that we
+do not introduce universal task/solver abstractions before repeated real-domain
+requirements exist.
 """
 
 from __future__ import annotations
@@ -21,6 +21,10 @@ import ves_modeling
 from ves_modeling.anomaly.problem import build_anomaly_problem
 from ves_modeling.anomaly.schema import (
     capabilities as anomaly_capabilities,
+)
+from ves_modeling.association.problem import build_association_problem
+from ves_modeling.association.schema import (
+    capabilities as association_capabilities,
 )
 from ves_modeling.classification.problem import build_classification_problem
 from ves_modeling.classification.schema import (
@@ -68,6 +72,7 @@ from ves_modeling.regression.schema import (
 )
 
 ALL_CAPABILITIES = (
+    association_capabilities,
     regression_capabilities,
     forecasting_capabilities,
     classification_capabilities,
@@ -86,6 +91,7 @@ ALL_CAPABILITIES = (
 
 def test_top_level_exports_all_builders() -> None:
     assert set(ves_modeling.__all__) == {
+        "build_association_problem",
         "build_anomaly_problem",
         "build_classification_problem",
         "build_clustering_problem",
@@ -106,7 +112,7 @@ def test_top_level_exports_all_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 13
+    assert len(declared) == 14
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -451,6 +457,23 @@ def _write_queueing_problem(root: Path) -> Path:
     return public
 
 
+def _make_association_data(root: Path) -> tuple[Path, Path]:
+    public = root / "public"
+    host = root / "host"
+    public.mkdir(parents=True)
+    host.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "transaction_id": [1, 1, 2, 2, 3, 3],
+            "item": ["a", "b", "a", "c", "b", "c"],
+        }
+    ).to_csv(public / "train.csv", index=False)
+    pd.DataFrame(
+        {"transaction_id": [1, 1], "item": ["a", "b"]}
+    ).to_csv(host / "hidden_test_transactions.csv", index=False)
+    return public, host
+
+
 def test_all_build_problems_constructible(tmp_path: Path) -> None:
     reg_public, reg_host = _make_regression_data(tmp_path / "reg")
     assert build_regression_problem(reg_public, reg_host) is not None
@@ -495,3 +518,6 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     queue_public = _write_queueing_problem(tmp_path / "queue")
     assert build_queueing_problem(queue_public) is not None
+
+    assoc_public, assoc_host = _make_association_data(tmp_path / "assoc")
+    assert build_association_problem(assoc_public, assoc_host) is not None

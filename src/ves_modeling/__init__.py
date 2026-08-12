@@ -1,6 +1,7 @@
 """VES Modeling: verifier-first executable search for computational modeling."""
 
 from ves_modeling.anomaly.problem import build_anomaly_problem
+from ves_modeling.association.problem import build_association_problem
 from ves_modeling.classification.problem import build_classification_problem
 from ves_modeling.clustering.problem import build_clustering_problem
 from ves_modeling.forecasting.problem import build_forecasting_problem
@@ -16,6 +17,7 @@ from ves_modeling.regression.problem import build_regression_problem
 
 __all__ = [
     "build_anomaly_problem",
+    "build_association_problem",
     "build_classification_problem",
     "build_clustering_problem",
     "build_forecasting_problem",
