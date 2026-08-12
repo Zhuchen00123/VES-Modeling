@@ -4,8 +4,8 @@ This suite is intentionally cross-cutting: it asserts the public contract of
 the whole package (regression / forecasting / classification / optimization /
 ODE / clustering / anomaly / graph / Monte Carlo / multi-objective /
 recommendation / probabilistic / queueing / association / survival /
-assignment / markov / binpacking / changepoint / lqr / seqpattern / sir)
-without re-running every per-slice behavior test.  It
+assignment / markov / binpacking / changepoint / lqr / seqpattern / sir /
+cellular) without re-running every per-slice behavior test.  It
 also guards the architecture rule that we do not introduce universal
 task/solver abstractions before repeated real-domain requirements exist.
 """
@@ -34,6 +34,10 @@ from ves_modeling.association.schema import (
 from ves_modeling.binpacking.problem import build_binpacking_problem
 from ves_modeling.binpacking.schema import (
     capabilities as binpacking_capabilities,
+)
+from ves_modeling.cellular.problem import build_cellular_problem
+from ves_modeling.cellular.schema import (
+    capabilities as cellular_capabilities,
 )
 from ves_modeling.changepoint.problem import build_changepoint_problem
 from ves_modeling.changepoint.schema import (
@@ -102,6 +106,7 @@ ALL_CAPABILITIES = (
     assignment_capabilities,
     association_capabilities,
     binpacking_capabilities,
+    cellular_capabilities,
     changepoint_capabilities,
     regression_capabilities,
     forecasting_capabilities,
@@ -129,6 +134,7 @@ def test_top_level_exports_all_builders() -> None:
         "build_assignment_problem",
         "build_association_problem",
         "build_binpacking_problem",
+        "build_cellular_problem",
         "build_changepoint_problem",
         "build_anomaly_problem",
         "build_classification_problem",
@@ -155,7 +161,7 @@ def test_top_level_exports_all_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 22
+    assert len(declared) == 23
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -613,6 +619,25 @@ def _write_binpacking_problem(root: Path) -> Path:
     return public
 
 
+def _write_cellular_problem(root: Path) -> Path:
+    public = root / "public"
+    public.mkdir(parents=True)
+    (public / "problem.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "rule": 110,
+                "width": 30,
+                "steps": 10,
+                "initial": [0] * 14 + [1] + [0] * 15,
+                "quantity": "final_density",
+            }
+        ),
+        encoding="utf-8",
+    )
+    return public
+
+
 def _write_changepoint_data(root: Path) -> tuple[Path, Path]:
     public = root / "public"
     host = root / "host"
@@ -762,6 +787,9 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     bin_public = _write_binpacking_problem(tmp_path / "bin")
     assert build_binpacking_problem(bin_public) is not None
+
+    cell_public = _write_cellular_problem(tmp_path / "cell")
+    assert build_cellular_problem(cell_public) is not None
 
     cp_public, cp_host = _write_changepoint_data(tmp_path / "cp")
     assert build_changepoint_problem(cp_public, cp_host) is not None

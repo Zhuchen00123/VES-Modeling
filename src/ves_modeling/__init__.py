@@ -4,6 +4,7 @@ from ves_modeling.anomaly.problem import build_anomaly_problem
 from ves_modeling.assignment.problem import build_assignment_problem
 from ves_modeling.association.problem import build_association_problem
 from ves_modeling.binpacking.problem import build_binpacking_problem
+from ves_modeling.cellular.problem import build_cellular_problem
 from ves_modeling.changepoint.problem import build_changepoint_problem
 from ves_modeling.classification.problem import build_classification_problem
 from ves_modeling.clustering.problem import build_clustering_problem
@@ -28,6 +29,7 @@ __all__ = [
     "build_assignment_problem",
     "build_association_problem",
     "build_binpacking_problem",
+    "build_cellular_problem",
     "build_changepoint_problem",
     "build_classification_problem",
     "build_clustering_problem",
