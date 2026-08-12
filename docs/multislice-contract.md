@@ -6,7 +6,8 @@ clustering, anomaly detection, graph, Monte Carlo, multi-objective,
 recommendation, probabilistic inference, queueing, association rules,
 survival analysis, assignment/TSP, Markov chain, bin packing,
 change-point detection, optimal control (LQR), sequential pattern
-mining, epidemic (SIR)).  Per-slice behavior contracts live in each slice's data
+mining, epidemic (SIR), cellular automaton, network epidemic,
+differential game (LQ)).  Per-slice behavior contracts live in each slice's data
 contract module; this page records the shared decisions and the frozen
 API naming used by all slices.
 
@@ -36,6 +37,9 @@ API naming used by all slices.
 | Optimal control (LQR) | `build_lqr_problem` | `run_lqr_search` | `apply_lqr_solution` | `total_cost` (+ `reference_optimal_cost` audit) |
 | Sequential patterns | `build_seqpattern_problem` | `run_seqpattern_search` | `apply_seqpattern_solution` | `mean_lift`, `mean_confidence`, counts (on hidden sequences) |
 | Epidemic (SIR) | `build_sir_problem` | `run_sir_search` | `apply_sir_solution` | `absolute_error`, `relative_error`, `ci_coverage` (audit) |
+| Cellular automaton | `build_cellular_problem` | `run_cellular_search` | `apply_cellular_solution` | `absolute_error`, `relative_error`, `ci_coverage` (audit) |
+| Network epidemic | `build_networksir_problem` | `run_networksir_search` | `apply_networksir_solution` | `absolute_error`, `relative_error`, `ci_coverage` (audit) |
+| Differential game (LQ) | `build_game_problem` | `run_game_search` | `apply_game_solution` | `total_cost` (+ game-Riccati audit) |
 
 Every slice declares `API_SCHEMA_VERSION = "1.0"` and distinguishes itself
 through `capabilities()["operations"]`; the version is shared because the

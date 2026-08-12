@@ -5,8 +5,8 @@ the whole package (regression / forecasting / classification / optimization /
 ODE / clustering / anomaly / graph / Monte Carlo / multi-objective /
 recommendation / probabilistic / queueing / association / survival /
 assignment / markov / binpacking / changepoint / lqr / seqpattern / sir /
-cellular / networksir) without re-running every per-slice behavior test.
-It
+cellular / networksir / game) without re-running every per-slice behavior
+test.  It
 also guards the architecture rule that we do not introduce universal
 task/solver abstractions before repeated real-domain requirements exist.
 """
@@ -56,6 +56,8 @@ from ves_modeling.forecasting.problem import build_forecasting_problem
 from ves_modeling.forecasting.schema import (
     capabilities as forecasting_capabilities,
 )
+from ves_modeling.game.problem import build_game_problem
+from ves_modeling.game.schema import capabilities as game_capabilities
 from ves_modeling.graph.problem import build_graph_problem
 from ves_modeling.graph.schema import capabilities as graph_capabilities
 from ves_modeling.lqr.problem import build_lqr_problem
@@ -120,6 +122,7 @@ ALL_CAPABILITIES = (
     optimization_capabilities,
     ode_capabilities,
     anomaly_capabilities,
+    game_capabilities,
     graph_capabilities,
     lqr_capabilities,
     markov_capabilities,
@@ -146,6 +149,7 @@ def test_top_level_exports_all_builders() -> None:
         "build_classification_problem",
         "build_clustering_problem",
         "build_forecasting_problem",
+        "build_game_problem",
         "build_graph_problem",
         "build_lqr_problem",
         "build_markov_problem",
@@ -168,7 +172,7 @@ def test_top_level_exports_all_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 24
+    assert len(declared) == 25
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -376,6 +380,28 @@ def _make_anomaly_data(root: Path) -> tuple[Path, Path]:
         host / "hidden_test_labels.csv", index=False
     )
     return public, host
+
+
+def _write_game_problem(root: Path) -> Path:
+    public = root / "public"
+    public.mkdir(parents=True)
+    (public / "problem.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "A": [[1.0]],
+                "B": [[1.0]],
+                "C": [[1.0]],
+                "Q": [[1.0]],
+                "R": [[1.0]],
+                "S": [[1.0]],
+                "x0": [1.0],
+                "horizon": 2,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return public
 
 
 def _write_graph_problem(root: Path) -> Path:
@@ -763,6 +789,9 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     fc_public, fc_host = _make_forecast_data(tmp_path / "fc")
     assert build_forecasting_problem(fc_public, fc_host) is not None
+
+    game_public = _write_game_problem(tmp_path / "game")
+    assert build_game_problem(game_public) is not None
 
     clf_public, clf_host = _make_classification_data(tmp_path / "clf")
     assert (
