@@ -2,7 +2,7 @@
 
 This document is the cross-cutting public contract for the six vertical
 slices (regression, forecasting, classification, optimization, ODE,
-clustering).  Per-slice behavior contracts live in each slice's data
+clustering, anomaly detection, graph).  Per-slice behavior contracts live in each slice's data
 contract module; this page records the shared decisions and the frozen
 API naming used by all slices.
 
@@ -16,6 +16,8 @@ API naming used by all slices.
 | Optimization | `build_optimization_problem` | `run_optimization_search` | `apply_optimization_solution` | `max_bound_violation`, `max_constraint_violation`, `integrality_violation`, `objective` |
 | ODE | `build_ode_problem` | `run_ode_search` | `apply_ode_solution` | `rmse`, `mae` (on hidden (t, y) points) |
 | Clustering | `build_clustering_problem` | `run_clustering_search` | `apply_clustering_solution` | `ari`, `nmi`, `v_measure`, `silhouette` (optional) |
+| Anomaly | `build_anomaly_problem` | `run_anomaly_search` | `apply_anomaly_solution` | `auroc`, `average_precision` (score) / `f1`, `balanced_accuracy` (label) |
+| Graph | `build_graph_problem` | `run_graph_search` | `apply_graph_solution` | `total_weight`/`total_value` + violations (`shortest_path`/`max_flow`/`min_spanning_tree`) |
 
 Every slice declares `API_SCHEMA_VERSION = "1.0"` and distinguishes itself
 through `capabilities()["operations"]`; the version is shared because the
@@ -71,6 +73,10 @@ would be speculative API until a real workflow needs it.
   samples); otherwise it falls back to `0.0` and never blocks verification.
   ARI/NMI/V-measure are permutation-invariant, so candidate cluster names
   never need to match host reference names.
+- Graph feasibility is enforced structurally in the artifact contract
+  (invalid paths/flow/trees are rejected before verification); the violation
+  observations (`path_violation`, `tree_violation`, capacity/conservation
+  residuals) are audit fields kept in the evidence for transparency.
 - Replay requires an absolute `PYTHONPATH` (`.deps:src:...`); relative paths
   fail under `LocalRegressionRunner` because the child process changes its
   working directory to the run directory.

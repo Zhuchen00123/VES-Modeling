@@ -18,7 +18,7 @@ Search improves candidate
 
 核心原则（继承 VES Core）：**AI can propose. It cannot grade itself.**
 
-## 支持的六类建模场景（R7.3–R12）
+## 支持的八类建模场景（R7.3–R14）
 
 | Slice | 输入（candidate 可见） | Host 真值 | Verified 指标 | 稳定 API |
 |---|---|---|---|---|
@@ -28,6 +28,8 @@ Search improves candidate
 | **Optimization** 约束优化 | `problem.json`（完整公开实例） | 无（实例即完整真值） | 界/约束/整性违反 + objective | `run_optimization_search` |
 | **ODE** 微分方程 | `train.csv`(t,y) + `test_features.csv` | `hidden_test_values.csv` | rmse, mae | `run_ode_search` |
 | **Clustering** 聚类 | 特征矩阵（无标签） | `hidden_test_labels.csv`（参考划分） | ari, nmi, v_measure, silhouette | `run_clustering_search` |
+| **Anomaly** 异常检测 | 正常样本特征 + 待判样本 | `hidden_test_labels.csv`（二元） | auroc, average_precision / f1, balanced_accuracy | `run_anomaly_search` |
+| **Graph** 图论 | `problem.json`（图完整实例） | 无（实例即完整真值） | 路径/流量/树总权重 + 违反残差 | `run_graph_search` |
 
 每个 slice 都有配套 `apply_*_solution`（无 host 真值时唯一成功状态
 `produced_unverified`，绝不伪造指标）与稳定 `capabilities()` JSON 能力声明
@@ -140,7 +142,7 @@ print(applied.to_summary()) # 无官方 labels 时绝不生成 RMSE/MAE
 - `capabilities()` 返回稳定的 JSON 能力声明；完整交付契约见
   [`docs/r7.3-delivery-contract.md`](docs/r7.3-delivery-contract.md)。
 
-## 其余五个 slice 的稳定 API
+## 其余七个 slice 的稳定 API
 
 ```python
 from ves_modeling.forecasting import run_forecasting_search
@@ -148,6 +150,8 @@ from ves_modeling.classification import run_classification_search
 from ves_modeling.optimization import run_optimization_search
 from ves_modeling.ode import run_ode_search
 from ves_modeling.clustering import run_clustering_search
+from ves_modeling.anomaly import run_anomaly_search
+from ves_modeling.graph import run_graph_search
 
 # 时间序列：key 模式（series_id + 严格 ISO 时间戳）或 input 模式
 fc = run_forecasting_search(public_dir, host_dir, drafts=2, improves=3,
@@ -176,11 +180,22 @@ clustering = run_clustering_search(public_dir, host_dir, drafts=2, improves=3,
                                    workspace=Path("runs"), generator="mock")
 print(clustering.status, clustering.best_ari, clustering.best_nmi,
       clustering.best_v_measure)
+
+# 异常检测：score（越大越异常）或 label 输出
+anomaly = run_anomaly_search(public_dir, host_dir, drafts=2, improves=3,
+                             workspace=Path("runs"), generator="mock")
+print(anomaly.status, anomaly.best_auroc, anomaly.best_average_precision)
+
+# 图论：problem.json 完整实例（最短路/最大流/最小生成树）
+graph = run_graph_search(public_dir, drafts=2, improves=3,
+                         workspace=Path("runs"), generator="mock")
+print(graph.status, graph.best_feasible, graph.best_total_weight)
 ```
 
 各 slice 的 apply API（`apply_forecasting_solution` /
 `apply_classification_solution` / `apply_optimization_solution` / `apply_ode_solution` /
-`apply_clustering_solution`）与 regression 同构：
+`apply_clustering_solution` / `apply_anomaly_solution` /
+`apply_graph_solution`）与 regression 同构：
 默认 Docker 执行、无 host 真值时状态为 `produced_unverified`；optimization 的 apply
 额外附 host 重算的可行性/目标事实（全局最优从不声称）。详见
 `docs/multislice-contract.md` 与各 slice 的 `capabilities()`。
@@ -203,9 +218,11 @@ print(clustering.status, clustering.best_ari, clustering.best_nmi,
 - R10 Optimization ✅ 公开 problem.json、host 重算违反/目标、tol 1e-6、绝不声称全局最优
 - R11 ODE ✅ 轨迹/单轨迹双模式、严格递增 t、host 按 (trajectory_id,t) 对齐重算 rmse/mae、solve_ivp Mock
 - R12 Clustering ✅ ARI/NMI/V-measure 排列不变、silhouette 可选、KMeans+spectral Mock
+- R13 Anomaly ✅ score/label 双模式、AUROC/AP/F1/balanced-accuracy、IsolationForest+z-score Mock
+- R14 Graph ✅ 最短路/最大流/最小生成树、纯 Python Mock、host 重算权重/流量+可行性
 - T-010 Suite ✅ 四 slice 集成测试、跨 slice 契约文档、本 README 概览
 
-当前全量测试：**non-Docker 241 passed / 17 deselected；Docker marker 17 passed**
+当前全量测试：**non-Docker 276 passed / 21 deselected；Docker marker 21 passed**
 （Docker Desktop 真实容器 hidden-truth attack）。
 
 ## 目录
@@ -217,8 +234,10 @@ src/ves_modeling/classification/ R9 分类 slice（10 模块）
 src/ves_modeling/optimization/   R10 约束优化 slice（10 模块）
 src/ves_modeling/ode/           R11 ODE slice（10 模块）
 src/ves_modeling/clustering/    R12 聚类 slice（10 模块）
+src/ves_modeling/anomaly/      R13 异常检测 slice（10 模块）
+src/ves_modeling/graph/        R14 图论 slice（10 模块）
 fixtures/candidates/             可信手写候选 + 对抗候选（cheating_candidate.py）
-fixtures/{forecasting,classification,optimization,ode,clustering}/  各 slice 可信候选
+fixtures/{forecasting,classification,optimization,ode,clustering,anomaly,graph}/  各 slice 可信候选
 examples/regression_demo.py      --mock / --llm 入口
 scripts/generate_regression_data.py
 tests/                           verifier / problem / mock search / claim-ignored / docker hidden truth / suite integration
