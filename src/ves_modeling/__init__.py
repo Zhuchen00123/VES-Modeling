@@ -19,6 +19,7 @@ from ves_modeling.probabilistic.problem import build_probabilistic_problem
 from ves_modeling.queueing.problem import build_queueing_problem
 from ves_modeling.recommendation.problem import build_recommendation_problem
 from ves_modeling.regression.problem import build_regression_problem
+from ves_modeling.seqpattern.problem import build_seqpattern_problem
 from ves_modeling.survival.problem import build_survival_problem
 
 __all__ = [
@@ -41,6 +42,7 @@ __all__ = [
     "build_queueing_problem",
     "build_recommendation_problem",
     "build_regression_problem",
+    "build_seqpattern_problem",
     "build_survival_problem",
 ]
 __version__ = "0.1.0"

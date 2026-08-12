@@ -4,8 +4,8 @@ This suite is intentionally cross-cutting: it asserts the public contract of
 the whole package (regression / forecasting / classification / optimization /
 ODE / clustering / anomaly / graph / Monte Carlo / multi-objective /
 recommendation / probabilistic / queueing / association / survival /
-assignment / markov / binpacking / changepoint / lqr) without re-running
-every per-slice behavior test.  It
+assignment / markov / binpacking / changepoint / lqr / seqpattern) without
+re-running every per-slice behavior test.  It
 also guards the architecture rule that we do not introduce universal
 task/solver abstractions before repeated real-domain requirements exist.
 """
@@ -87,6 +87,10 @@ from ves_modeling.regression.problem import build_regression_problem
 from ves_modeling.regression.schema import (
     capabilities as regression_capabilities,
 )
+from ves_modeling.seqpattern.problem import build_seqpattern_problem
+from ves_modeling.seqpattern.schema import (
+    capabilities as seqpattern_capabilities,
+)
 from ves_modeling.survival.problem import build_survival_problem
 from ves_modeling.survival.schema import (
     capabilities as survival_capabilities,
@@ -112,6 +116,7 @@ ALL_CAPABILITIES = (
     recommendation_capabilities,
     probabilistic_capabilities,
     queueing_capabilities,
+    seqpattern_capabilities,
     survival_capabilities,
 )
 
@@ -137,6 +142,7 @@ def test_top_level_exports_all_builders() -> None:
         "build_queueing_problem",
         "build_recommendation_problem",
         "build_regression_problem",
+        "build_seqpattern_problem",
         "build_survival_problem",
     }
     for name in ves_modeling.__all__:
@@ -145,7 +151,7 @@ def test_top_level_exports_all_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 20
+    assert len(declared) == 21
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -529,6 +535,42 @@ def _make_survival_data(root: Path) -> tuple[Path, Path]:
     return public, host
 
 
+def _make_seqpattern_data(root: Path) -> tuple[Path, Path]:
+    public = root / "public"
+    host = root / "host"
+    public.mkdir(parents=True)
+    host.mkdir(parents=True)
+    train = [
+        ("a", "b", "c"),
+        ("a", "b", "d"),
+        ("a", "b", "e"),
+        ("a", "c", "b"),
+        ("a", "b", "c"),
+        ("a", "b", "d"),
+        ("a", "b", "e"),
+        ("a", "c", "b"),
+        ("a", "b", "c"),
+        ("a", "b", "d"),
+    ]
+    train_rows = [
+        (sid, step, event)
+        for sid, sequence in enumerate(train)
+        for step, event in enumerate(sequence)
+    ]
+    hidden_rows = [
+        (sid, step, event)
+        for sid, sequence in enumerate([("a", "b", "x")] * 5)
+        for step, event in enumerate(sequence)
+    ]
+    pd.DataFrame(
+        train_rows, columns=["sequence_id", "step", "event"]
+    ).to_csv(public / "train.csv", index=False)
+    pd.DataFrame(
+        hidden_rows, columns=["sequence_id", "step", "event"]
+    ).to_csv(host / "hidden_test_sequences.csv", index=False)
+    return public, host
+
+
 def _write_assignment_problem(root: Path) -> Path:
     public = root / "public"
     public.mkdir(parents=True)
@@ -700,3 +742,6 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     lqr_public = _write_lqr_problem(tmp_path / "lqr")
     assert build_lqr_problem(lqr_public) is not None
+
+    seq_public, seq_host = _make_seqpattern_data(tmp_path / "seq")
+    assert build_seqpattern_problem(seq_public, seq_host) is not None
