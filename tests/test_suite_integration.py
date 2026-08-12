@@ -4,8 +4,8 @@ This suite is intentionally cross-cutting: it asserts the public contract of
 the whole package (regression / forecasting / classification / optimization /
 ODE / clustering / anomaly / graph / Monte Carlo / multi-objective /
 recommendation / probabilistic / queueing / association / survival /
-assignment / markov / binpacking / changepoint / lqr / seqpattern) without
-re-running every per-slice behavior test.  It
+assignment / markov / binpacking / changepoint / lqr / seqpattern / sir)
+without re-running every per-slice behavior test.  It
 also guards the architecture rule that we do not introduce universal
 task/solver abstractions before repeated real-domain requirements exist.
 """
@@ -91,6 +91,8 @@ from ves_modeling.seqpattern.problem import build_seqpattern_problem
 from ves_modeling.seqpattern.schema import (
     capabilities as seqpattern_capabilities,
 )
+from ves_modeling.sir.problem import build_sir_problem
+from ves_modeling.sir.schema import capabilities as sir_capabilities
 from ves_modeling.survival.problem import build_survival_problem
 from ves_modeling.survival.schema import (
     capabilities as survival_capabilities,
@@ -117,6 +119,7 @@ ALL_CAPABILITIES = (
     probabilistic_capabilities,
     queueing_capabilities,
     seqpattern_capabilities,
+    sir_capabilities,
     survival_capabilities,
 )
 
@@ -143,6 +146,7 @@ def test_top_level_exports_all_builders() -> None:
         "build_recommendation_problem",
         "build_regression_problem",
         "build_seqpattern_problem",
+        "build_sir_problem",
         "build_survival_problem",
     }
     for name in ves_modeling.__all__:
@@ -151,7 +155,7 @@ def test_top_level_exports_all_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 21
+    assert len(declared) == 22
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -647,6 +651,28 @@ def _write_lqr_problem(root: Path) -> Path:
     return public
 
 
+def _write_sir_problem(root: Path) -> Path:
+    public = root / "public"
+    public.mkdir(parents=True)
+    (public / "problem.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "model": "sir",
+                "beta": 0.5,
+                "gamma": 0.1,
+                "N": 1000,
+                "i0": 5,
+                "r0": 0,
+                "t_end": 50.0,
+                "quantity": "final_size",
+            }
+        ),
+        encoding="utf-8",
+    )
+    return public
+
+
 def _make_markov_data(root: Path) -> tuple[Path, Path]:
     public = root / "public"
     host = root / "host"
@@ -745,3 +771,6 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     seq_public, seq_host = _make_seqpattern_data(tmp_path / "seq")
     assert build_seqpattern_problem(seq_public, seq_host) is not None
+
+    sir_public = _write_sir_problem(tmp_path / "sir")
+    assert build_sir_problem(sir_public) is not None

@@ -18,7 +18,7 @@ Search improves candidate
 
 核心原则（继承 VES Core）：**AI can propose. It cannot grade itself.**
 
-## 支持的十九类建模场景（R7.3–R25）
+## 支持的二十二类建模场景（R7.3–R28）
 
 | Slice | 输入（candidate 可见） | Host 真值 | Verified 指标 | 稳定 API |
 |---|---|---|---|---|
@@ -41,6 +41,9 @@ Search improves candidate
 | **Markov** 马尔可夫链 | `problem.json`(目标量) + 观测状态序列 | `hidden_parameters.json`（真转移矩阵） | 相对/绝对误差 + CI 覆盖 | `run_markov_search` |
 | **BinPacking** 装箱 | `problem.json`（容量+物品） | 无（实例即完整真值） | bin_count + 容量违反 | `run_binpacking_search` |
 | **Change-point** 变点检测 | 观测时序（t,y） | `hidden_test_changepoints.csv` | precision, recall, f1, mean_distance | `run_changepoint_search` |
+| **LQR** 最优控制 | `problem.json`（A/B/Q/R/x0/horizon） | 无（实例即完整真值） | total_cost (+最优成本审计) | `run_lqr_search` |
+| **SeqPattern** 序列模式 | 事件序列（sequence_id/step/event） | `hidden_test_sequences.csv` | mean_lift, mean_confidence | `run_seqpattern_search` |
+| **SIR** 传染病仿真 | `problem.json`（beta/gamma/N/i0） | 无（host 数值解真值） | 相对/绝对误差 + CI 覆盖 | `run_sir_search` |
 
 每个 slice 都有配套 `apply_*_solution`（无 host 真值时唯一成功状态
 `produced_unverified`，绝不伪造指标）与稳定 `capabilities()` JSON 能力声明
@@ -153,7 +156,7 @@ print(applied.to_summary()) # 无官方 labels 时绝不生成 RMSE/MAE
 - `capabilities()` 返回稳定的 JSON 能力声明；完整交付契约见
   [`docs/r7.3-delivery-contract.md`](docs/r7.3-delivery-contract.md)。
 
-## 其余十八个 slice 的稳定 API
+## 其余二十一个 slice 的稳定 API
 
 ```python
 from ves_modeling.forecasting import run_forecasting_search
@@ -174,6 +177,9 @@ from ves_modeling.assignment import run_assignment_search
 from ves_modeling.markov import run_markov_search
 from ves_modeling.binpacking import run_binpacking_search
 from ves_modeling.changepoint import run_changepoint_search
+from ves_modeling.lqr import run_lqr_search
+from ves_modeling.seqpattern import run_seqpattern_search
+from ves_modeling.sir import run_sir_search
 
 # 时间序列：key 模式（series_id + 严格 ISO 时间戳）或 input 模式
 fc = run_forecasting_search(public_dir, host_dir, drafts=2, improves=3,
@@ -267,6 +273,21 @@ print(bp.status, bp.best_bin_count)
 cp = run_changepoint_search(public_dir, host_dir, drafts=2, improves=3,
                             workspace=Path("runs"), generator="mock")
 print(cp.status, cp.best_f1, cp.best_mean_distance)
+
+# LQR 最优控制：problem.json 完整实例（A/B/Q/R），host 重算成本
+lqr = run_lqr_search(public_dir, drafts=2, improves=3,
+                     workspace=Path("runs"), generator="mock")
+print(lqr.status, lqr.best_total_cost)
+
+# 序列模式：train 挖连续序列规则，host 在隐藏序列验证
+sp = run_seqpattern_search(public_dir, host_dir, drafts=2, improves=3,
+                           workspace=Path("runs"), generator="mock")
+print(sp.status, sp.best_mean_lift, sp.best_mean_confidence)
+
+# SIR 传染病：仿真估计疫情量，host 数值解真值
+sir = run_sir_search(public_dir, drafts=2, improves=3,
+                     workspace=Path("runs"), generator="mock")
+print(sir.status, sir.best_relative_error, sir.best_absolute_error)
 ```
 
 各 slice 的 apply API（`apply_forecasting_solution` /
@@ -276,7 +297,8 @@ print(cp.status, cp.best_f1, cp.best_mean_distance)
 `apply_multiobjective_solution` / `apply_recommendation_solution` /
 `apply_probabilistic_solution` / `apply_queueing_solution` / `apply_association_solution` /
 `apply_survival_solution` / `apply_assignment_solution` / `apply_markov_solution` /
-`apply_binpacking_solution` / `apply_changepoint_solution`）与 regression 同构：
+`apply_binpacking_solution` / `apply_changepoint_solution` / `apply_lqr_solution` /
+`apply_seqpattern_solution` / `apply_sir_solution`）与 regression 同构：
 默认 Docker 执行、无 host 真值时状态为 `produced_unverified`；optimization 的 apply
 额外附 host 重算的可行性/目标事实（全局最优从不声称）。详见
 `docs/multislice-contract.md` 与各 slice 的 `capabilities()`。
@@ -312,9 +334,12 @@ print(cp.status, cp.best_f1, cp.best_mean_distance)
 - R23 Markov ✅ 转移概率/稳态/期望回归时间、host 真矩阵、频率 MLE+幂迭代 Mock
 - R24 BinPacking ✅ FFD/Best-Fit 纯 Python、bin_count MIN + 容量违反 gate
 - R25 Change-point ✅ CUSUM/滑动窗口、w=3 贪心匹配 f1/距离、host 隐藏真实变点
+- R26 LQR ✅ 有限时域离散 LQR、Riccati 最优成本审计、total_cost MIN
+- R27 SeqPattern ✅ 连续序列规则、隐藏序列验证、PrefixSpan+随机 Mock
+- R28 SIR ✅ 传染病动力学、RK45 数值参考、RK4+Gillespie Mock
 - T-010 Suite ✅ 四 slice 集成测试、跨 slice 契约文档、本 README 概览
 
-当前全量测试：**non-Docker 427 passed / 43 deselected；Docker marker 43 passed**
+当前全量测试：**non-Docker 465 passed / 49 deselected；Docker marker 49 passed**
 （Docker Desktop 真实容器 hidden-truth attack）。
 
 ## 目录
@@ -339,8 +364,11 @@ src/ves_modeling/assignment/    R22 指派/TSP slice（10 模块）
 src/ves_modeling/markov/       R23 马尔可夫链 slice（10 模块）
 src/ves_modeling/binpacking/   R24 装箱 slice（10 模块）
 src/ves_modeling/changepoint/  R25 变点检测 slice（10 模块）
+src/ves_modeling/lqr/          R26 最优控制 slice（10 模块）
+src/ves_modeling/seqpattern/   R27 序列模式 slice（10 模块）
+src/ves_modeling/sir/          R28 传染病仿真 slice（10 模块）
 fixtures/candidates/             可信手写候选 + 对抗候选（cheating_candidate.py）
-fixtures/{forecasting,classification,optimization,ode,clustering,anomaly,graph,montecarlo,multiobjective,recommendation,probabilistic,queueing,association,survival,assignment,markov,binpacking,changepoint}/  各 slice 可信候选
+fixtures/{forecasting,classification,optimization,ode,clustering,anomaly,graph,montecarlo,multiobjective,recommendation,probabilistic,queueing,association,survival,assignment,markov,binpacking,changepoint,lqr,seqpattern,sir}/  各 slice 可信候选
 examples/regression_demo.py      --mock / --llm 入口
 scripts/generate_regression_data.py
 tests/                           verifier / problem / mock search / claim-ignored / docker hidden truth / suite integration

@@ -5,7 +5,8 @@ slices (regression, forecasting, classification, optimization, ODE,
 clustering, anomaly detection, graph, Monte Carlo, multi-objective,
 recommendation, probabilistic inference, queueing, association rules,
 survival analysis, assignment/TSP, Markov chain, bin packing,
-change-point detection).  Per-slice behavior contracts live in each slice's data
+change-point detection, optimal control (LQR), sequential pattern
+mining, epidemic (SIR)).  Per-slice behavior contracts live in each slice's data
 contract module; this page records the shared decisions and the frozen
 API naming used by all slices.
 
@@ -32,6 +33,9 @@ API naming used by all slices.
 | Markov chain | `build_markov_problem` | `run_markov_search` | `apply_markov_solution` | `absolute_error`, `relative_error`, `ci_coverage` (audit) |
 | Bin packing | `build_binpacking_problem` | `run_binpacking_search` | `apply_binpacking_solution` | `bin_count` + capacity violations |
 | Change-point | `build_changepoint_problem` | `run_changepoint_search` | `apply_changepoint_solution` | `precision`, `recall`, `f1`, `mean_distance` |
+| Optimal control (LQR) | `build_lqr_problem` | `run_lqr_search` | `apply_lqr_solution` | `total_cost` (+ `reference_optimal_cost` audit) |
+| Sequential patterns | `build_seqpattern_problem` | `run_seqpattern_search` | `apply_seqpattern_solution` | `mean_lift`, `mean_confidence`, counts (on hidden sequences) |
+| Epidemic (SIR) | `build_sir_problem` | `run_sir_search` | `apply_sir_solution` | `absolute_error`, `relative_error`, `ci_coverage` (audit) |
 
 Every slice declares `API_SCHEMA_VERSION = "1.0"` and distinguishes itself
 through `capabilities()["operations"]`; the version is shared because the
@@ -96,6 +100,14 @@ would be speculative API until a real workflow needs it.
   (invalid paths/flow/trees are rejected before verification); the violation
   observations (`path_violation`, `tree_violation`, capacity/conservation
   residuals) are audit fields kept in the evidence for transparency.
+- Lift semantics differ between association rules and sequential
+  patterns: in R20 association rules a rule with P(consequent) == 0 gets
+  lift = cap (1e6); in R27 sequential patterns a pattern with P(suffix) == 0
+  gets lift = 0.  Both clip to the finite cap to avoid inf/NaN.
+- Epidemic (SIR) references are host-computed numerical solutions
+  (`scipy.integrate.solve_ivp`, RK45, rtol 1e-9); `peak_infected` uses a
+  20001-point dense-output sampling and is documented as a numerical
+  reference.
 - Queueing `prob_wait_gt` and `mean_wait` refer to *queueing* wait
   (time in queue, excluding service).  M/M/1 references use the closed forms
   and M/M/c uses Erlang-C; the analytic reference is host-held and never
