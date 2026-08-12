@@ -3,10 +3,10 @@
 This suite is intentionally cross-cutting: it asserts the public contract of
 the whole package (regression / forecasting / classification / optimization /
 ODE / clustering / anomaly / graph / Monte Carlo / multi-objective /
-recommendation / probabilistic / queueing / association / survival) without
-re-running every per-slice behavior test.  It also guards the architecture
-rule that we do not introduce universal task/solver abstractions before
-repeated real-domain requirements exist.
+recommendation / probabilistic / queueing / association / survival /
+assignment / markov) without re-running every per-slice behavior test.  It
+also guards the architecture rule that we do not introduce universal
+task/solver abstractions before repeated real-domain requirements exist.
 """
 
 from __future__ import annotations
@@ -44,6 +44,8 @@ from ves_modeling.forecasting.schema import (
 )
 from ves_modeling.graph.problem import build_graph_problem
 from ves_modeling.graph.schema import capabilities as graph_capabilities
+from ves_modeling.markov.problem import build_markov_problem
+from ves_modeling.markov.schema import capabilities as markov_capabilities
 from ves_modeling.montecarlo.problem import build_montecarlo_problem
 from ves_modeling.montecarlo.schema import (
     capabilities as montecarlo_capabilities,
@@ -90,6 +92,7 @@ ALL_CAPABILITIES = (
     ode_capabilities,
     anomaly_capabilities,
     graph_capabilities,
+    markov_capabilities,
     montecarlo_capabilities,
     multiobjective_capabilities,
     recommendation_capabilities,
@@ -108,6 +111,7 @@ def test_top_level_exports_all_builders() -> None:
         "build_clustering_problem",
         "build_forecasting_problem",
         "build_graph_problem",
+        "build_markov_problem",
         "build_montecarlo_problem",
         "build_multiobjective_problem",
         "build_ode_problem",
@@ -124,7 +128,7 @@ def test_top_level_exports_all_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 16
+    assert len(declared) == 17
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -529,6 +533,36 @@ def _write_assignment_problem(root: Path) -> Path:
     return public
 
 
+def _make_markov_data(root: Path) -> tuple[Path, Path]:
+    public = root / "public"
+    host = root / "host"
+    public.mkdir(parents=True)
+    host.mkdir(parents=True)
+    (public / "problem.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "quantity": "transition_probability",
+                "states": ["a", "b"],
+                "from_state": "a",
+                "to_state": "b",
+            }
+        ),
+        encoding="utf-8",
+    )
+    states = ["a", "b"] * 30
+    pd.DataFrame({"state": states}).to_csv(
+        public / "train.csv", index=False
+    )
+    (host / "hidden_parameters.json").write_text(
+        json.dumps(
+            {"transition_matrix": [[0.7, 0.3], [0.4, 0.6]]}
+        ),
+        encoding="utf-8",
+    )
+    return public, host
+
+
 def test_all_build_problems_constructible(tmp_path: Path) -> None:
     reg_public, reg_host = _make_regression_data(tmp_path / "reg")
     assert build_regression_problem(reg_public, reg_host) is not None
@@ -582,3 +616,6 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     assign_public = _write_assignment_problem(tmp_path / "assign")
     assert build_assignment_problem(assign_public) is not None
+
+    markov_public, markov_host = _make_markov_data(tmp_path / "markov")
+    assert build_markov_problem(markov_public, markov_host) is not None

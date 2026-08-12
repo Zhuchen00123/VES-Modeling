@@ -7,6 +7,7 @@ from ves_modeling.classification.problem import build_classification_problem
 from ves_modeling.clustering.problem import build_clustering_problem
 from ves_modeling.forecasting.problem import build_forecasting_problem
 from ves_modeling.graph.problem import build_graph_problem
+from ves_modeling.markov.problem import build_markov_problem
 from ves_modeling.montecarlo.problem import build_montecarlo_problem
 from ves_modeling.multiobjective.problem import build_multiobjective_problem
 from ves_modeling.ode.problem import build_ode_problem
@@ -25,6 +26,7 @@ __all__ = [
     "build_clustering_problem",
     "build_forecasting_problem",
     "build_graph_problem",
+    "build_markov_problem",
     "build_montecarlo_problem",
     "build_multiobjective_problem",
     "build_ode_problem",
