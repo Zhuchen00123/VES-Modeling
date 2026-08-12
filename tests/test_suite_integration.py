@@ -2,10 +2,10 @@
 
 This suite is intentionally cross-cutting: it asserts the public contract of
 the whole package (regression / forecasting / classification / optimization /
-ODE / clustering / anomaly / graph / Monte Carlo / multi-objective) without
-re-running every per-slice behavior test.  It also guards the architecture
-rule that we do not introduce universal task/solver abstractions before
-repeated real-domain requirements exist.
+ODE / clustering / anomaly / graph / Monte Carlo / multi-objective /
+recommendation) without re-running every per-slice behavior test.  It also
+guards the architecture rule that we do not introduce universal task/solver
+abstractions before repeated real-domain requirements exist.
 """
 
 from __future__ import annotations
@@ -49,6 +49,10 @@ from ves_modeling.optimization.problem import build_optimization_problem
 from ves_modeling.optimization.schema import (
     capabilities as optimization_capabilities,
 )
+from ves_modeling.recommendation.problem import build_recommendation_problem
+from ves_modeling.recommendation.schema import (
+    capabilities as recommendation_capabilities,
+)
 from ves_modeling.regression.problem import build_regression_problem
 from ves_modeling.regression.schema import (
     capabilities as regression_capabilities,
@@ -65,6 +69,7 @@ ALL_CAPABILITIES = (
     graph_capabilities,
     montecarlo_capabilities,
     multiobjective_capabilities,
+    recommendation_capabilities,
 )
 
 
@@ -79,6 +84,7 @@ def test_top_level_exports_all_builders() -> None:
         "build_multiobjective_problem",
         "build_ode_problem",
         "build_optimization_problem",
+        "build_recommendation_problem",
         "build_regression_problem",
     }
     for name in ves_modeling.__all__:
@@ -87,7 +93,7 @@ def test_top_level_exports_all_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 10
+    assert len(declared) == 11
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -369,6 +375,31 @@ def _write_multiobjective_problem(root: Path) -> Path:
     return public
 
 
+def _make_recommendation_data(root: Path) -> tuple[Path, Path]:
+    public = root / "public"
+    host = root / "host"
+    public.mkdir(parents=True)
+    host.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "user_id": ["u0"] * 4 + ["u1"] * 4,
+            "item_id": ["a", "b", "c", "d"] * 2,
+            "rating": [1.0, 2.0, 3.0, 4.0] * 2,
+        }
+    ).to_csv(public / "train.csv", index=False)
+    pd.DataFrame(
+        {"user_id": ["u0", "u1"], "item_id": ["e", "e"]}
+    ).to_csv(public / "test_features.csv", index=False)
+    pd.DataFrame(
+        {
+            "user_id": ["u0", "u1"],
+            "item_id": ["e", "e"],
+            "rating": [3.0, 3.0],
+        }
+    ).to_csv(host / "hidden_test_ratings.csv", index=False)
+    return public, host
+
+
 def test_all_build_problems_constructible(tmp_path: Path) -> None:
     reg_public, reg_host = _make_regression_data(tmp_path / "reg")
     assert build_regression_problem(reg_public, reg_host) is not None
@@ -404,3 +435,6 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     moo_public = _write_multiobjective_problem(tmp_path / "moo")
     assert build_multiobjective_problem(moo_public) is not None
+
+    rec_public, rec_host = _make_recommendation_data(tmp_path / "rec")
+    assert build_recommendation_problem(rec_public, rec_host) is not None

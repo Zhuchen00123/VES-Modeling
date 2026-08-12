@@ -9,6 +9,7 @@ from ves_modeling.montecarlo.problem import build_montecarlo_problem
 from ves_modeling.multiobjective.problem import build_multiobjective_problem
 from ves_modeling.ode.problem import build_ode_problem
 from ves_modeling.optimization.problem import build_optimization_problem
+from ves_modeling.recommendation.problem import build_recommendation_problem
 from ves_modeling.regression.problem import build_regression_problem
 
 __all__ = [
@@ -21,6 +22,7 @@ __all__ = [
     "build_multiobjective_problem",
     "build_ode_problem",
     "build_optimization_problem",
+    "build_recommendation_problem",
     "build_regression_problem",
 ]
 __version__ = "0.1.0"
