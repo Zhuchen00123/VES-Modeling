@@ -18,7 +18,7 @@ Search improves candidate
 
 核心原则（继承 VES Core）：**AI can propose. It cannot grade itself.**
 
-## 支持的十三类建模场景（R7.3–R19）
+## 支持的十六类建模场景（R7.3–R22）
 
 | Slice | 输入（candidate 可见） | Host 真值 | Verified 指标 | 稳定 API |
 |---|---|---|---|---|
@@ -35,6 +35,9 @@ Search improves candidate
 | **Recommendation** 推荐系统 | user-item 评分历史 + 待预测对 | `hidden_test_ratings.csv` | rmse, mae, ndcg@5(审计) | `run_recommendation_search` |
 | **Probabilistic** 概率推断 | `problem.json`(分布族) + 观测样本 | `hidden_parameters.json`（真参数） | 相对/绝对误差 + CI 覆盖 | `run_probabilistic_search` |
 | **Queueing** 排队论 | `problem.json`（排队系统定义） | 无（host 持解析公式真值） | 相对/绝对误差 + CI 覆盖 | `run_queueing_search` |
+| **Association** 关联规则 | `train.csv`（事务长表） | `hidden_test_transactions.csv` | mean_lift, mean_confidence | `run_association_search` |
+| **Survival** 生存分析 | 观测 time/event + 特征 | `hidden_test_outcomes.csv` | c_index, mae(time 模式) | `run_survival_search` |
+| **Assignment/TSP** 指派/旅行商 | `problem.json`（成本/距离矩阵） | 无（实例即完整真值） | total_cost | `run_assignment_search` |
 
 每个 slice 都有配套 `apply_*_solution`（无 host 真值时唯一成功状态
 `produced_unverified`，绝不伪造指标）与稳定 `capabilities()` JSON 能力声明
@@ -147,7 +150,7 @@ print(applied.to_summary()) # 无官方 labels 时绝不生成 RMSE/MAE
 - `capabilities()` 返回稳定的 JSON 能力声明；完整交付契约见
   [`docs/r7.3-delivery-contract.md`](docs/r7.3-delivery-contract.md)。
 
-## 其余十二个 slice 的稳定 API
+## 其余十五个 slice 的稳定 API
 
 ```python
 from ves_modeling.forecasting import run_forecasting_search
@@ -162,6 +165,9 @@ from ves_modeling.multiobjective import run_multiobjective_search
 from ves_modeling.recommendation import run_recommendation_search
 from ves_modeling.probabilistic import run_probabilistic_search
 from ves_modeling.queueing import run_queueing_search
+from ves_modeling.association import run_association_search
+from ves_modeling.survival import run_survival_search
+from ves_modeling.assignment import run_assignment_search
 
 # 时间序列：key 模式（series_id + 严格 ISO 时间戳）或 input 模式
 fc = run_forecasting_search(public_dir, host_dir, drafts=2, improves=3,
@@ -225,6 +231,21 @@ print(prob.status, prob.best_relative_error, prob.best_absolute_error)
 que = run_queueing_search(public_dir, drafts=2, improves=3,
                           workspace=Path("runs"), generator="mock")
 print(que.status, que.best_relative_error, que.best_absolute_error)
+
+# 关联规则：train 学规则，host 在隐藏事务上重算 lift/confidence
+assoc = run_association_search(public_dir, host_dir, drafts=2, improves=3,
+                               workspace=Path("runs"), generator="mock")
+print(assoc.status, assoc.best_mean_lift, assoc.best_mean_confidence)
+
+# 生存分析：风险分数或预测时间，host 隐藏结局
+surv = run_survival_search(public_dir, host_dir, drafts=2, improves=3,
+                           workspace=Path("runs"), generator="mock")
+print(surv.status, surv.best_c_index)
+
+# 指派/TSP：problem.json 完整实例（成本/距离矩阵）
+assign = run_assignment_search(public_dir, drafts=2, improves=3,
+                               workspace=Path("runs"), generator="mock")
+print(assign.status, assign.best_total_cost)
 ```
 
 各 slice 的 apply API（`apply_forecasting_solution` /
@@ -232,7 +253,8 @@ print(que.status, que.best_relative_error, que.best_absolute_error)
 `apply_clustering_solution` / `apply_anomaly_solution` /
 `apply_graph_solution` / `apply_montecarlo_solution` /
 `apply_multiobjective_solution` / `apply_recommendation_solution` /
-`apply_probabilistic_solution` / `apply_queueing_solution`）与 regression 同构：
+`apply_probabilistic_solution` / `apply_queueing_solution` / `apply_association_solution` /
+`apply_survival_solution` / `apply_assignment_solution`）与 regression 同构：
 默认 Docker 执行、无 host 真值时状态为 `produced_unverified`；optimization 的 apply
 额外附 host 重算的可行性/目标事实（全局最优从不声称）。详见
 `docs/multislice-contract.md` 与各 slice 的 `capabilities()`。
@@ -262,9 +284,12 @@ print(que.status, que.best_relative_error, que.best_absolute_error)
 - R17 Recommendation ✅ user-item 评分预测、rmse/mae/ndcg@5 审计、偏差基线+SVD Mock
 - R18 Probabilistic ✅ normal/gamma/beta 参数估计、host 真参数、MLE+bootstrap CI Mock
 - R19 Queueing ✅ M/M/1 与 M/M/c、解析公式真值、离散事件仿真 Mock
+- R20 Association ✅ 隐藏事务验证规则、mean_lift/mean_confidence、Apriori+随机 Mock
+- R21 Survival ✅ Harrell C-index、risk/time 双模式、Cox 简化+KM Mock
+- R22 Assignment/TSP ✅ 匈牙利/最近邻+2-opt 纯 Python Mock、host 复算总成本
 - T-010 Suite ✅ 四 slice 集成测试、跨 slice 契约文档、本 README 概览
 
-当前全量测试：**non-Docker 348 passed / 31 deselected；Docker marker 31 passed**
+当前全量测试：**non-Docker 390 passed / 37 deselected；Docker marker 37 passed**
 （Docker Desktop 真实容器 hidden-truth attack）。
 
 ## 目录
@@ -283,8 +308,11 @@ src/ves_modeling/multiobjective/ R16 多目标优化 slice（10 模块）
 src/ves_modeling/recommendation/ R17 推荐系统 slice（10 模块）
 src/ves_modeling/probabilistic/  R18 概率推断 slice（10 模块）
 src/ves_modeling/queueing/       R19 排队论 slice（10 模块）
+src/ves_modeling/association/   R20 关联规则 slice（10 模块）
+src/ves_modeling/survival/      R21 生存分析 slice（10 模块）
+src/ves_modeling/assignment/    R22 指派/TSP slice（10 模块）
 fixtures/candidates/             可信手写候选 + 对抗候选（cheating_candidate.py）
-fixtures/{forecasting,classification,optimization,ode,clustering,anomaly,graph,montecarlo,multiobjective,recommendation,probabilistic,queueing}/  各 slice 可信候选
+fixtures/{forecasting,classification,optimization,ode,clustering,anomaly,graph,montecarlo,multiobjective,recommendation,probabilistic,queueing,association,survival,assignment}/  各 slice 可信候选
 examples/regression_demo.py      --mock / --llm 入口
 scripts/generate_regression_data.py
 tests/                           verifier / problem / mock search / claim-ignored / docker hidden truth / suite integration

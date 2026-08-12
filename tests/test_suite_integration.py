@@ -22,6 +22,10 @@ from ves_modeling.anomaly.problem import build_anomaly_problem
 from ves_modeling.anomaly.schema import (
     capabilities as anomaly_capabilities,
 )
+from ves_modeling.assignment.problem import build_assignment_problem
+from ves_modeling.assignment.schema import (
+    capabilities as assignment_capabilities,
+)
 from ves_modeling.association.problem import build_association_problem
 from ves_modeling.association.schema import (
     capabilities as association_capabilities,
@@ -76,6 +80,7 @@ from ves_modeling.survival.schema import (
 )
 
 ALL_CAPABILITIES = (
+    assignment_capabilities,
     association_capabilities,
     regression_capabilities,
     forecasting_capabilities,
@@ -96,6 +101,7 @@ ALL_CAPABILITIES = (
 
 def test_top_level_exports_all_builders() -> None:
     assert set(ves_modeling.__all__) == {
+        "build_assignment_problem",
         "build_association_problem",
         "build_anomaly_problem",
         "build_classification_problem",
@@ -118,7 +124,7 @@ def test_top_level_exports_all_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 15
+    assert len(declared) == 16
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -502,6 +508,27 @@ def _make_survival_data(root: Path) -> tuple[Path, Path]:
     return public, host
 
 
+def _write_assignment_problem(root: Path) -> Path:
+    public = root / "public"
+    public.mkdir(parents=True)
+    (public / "problem.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "problem_type": "assignment",
+                "size": 3,
+                "costs": [
+                    [4.0, 1.0, 3.0],
+                    [2.0, 0.0, 5.0],
+                    [3.0, 2.0, 2.0],
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return public
+
+
 def test_all_build_problems_constructible(tmp_path: Path) -> None:
     reg_public, reg_host = _make_regression_data(tmp_path / "reg")
     assert build_regression_problem(reg_public, reg_host) is not None
@@ -552,3 +579,6 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     surv_public, surv_host = _make_survival_data(tmp_path / "surv")
     assert build_survival_problem(surv_public, surv_host) is not None
+
+    assign_public = _write_assignment_problem(tmp_path / "assign")
+    assert build_assignment_problem(assign_public) is not None

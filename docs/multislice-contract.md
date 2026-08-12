@@ -3,7 +3,8 @@
 This document is the cross-cutting public contract for the six vertical
 slices (regression, forecasting, classification, optimization, ODE,
 clustering, anomaly detection, graph, Monte Carlo, multi-objective,
-recommendation, probabilistic inference, queueing).  Per-slice behavior contracts live in each slice's data
+recommendation, probabilistic inference, queueing, association rules,
+survival analysis, assignment/TSP).  Per-slice behavior contracts live in each slice's data
 contract module; this page records the shared decisions and the frozen
 API naming used by all slices.
 
@@ -24,6 +25,9 @@ API naming used by all slices.
 | Recommendation | `build_recommendation_problem` | `run_recommendation_search` | `apply_recommendation_solution` | `rmse`, `mae`, `ndcg@5` (audit) |
 | Probabilistic | `build_probabilistic_problem` | `run_probabilistic_search` | `apply_probabilistic_solution` | `absolute_error`, `relative_error`, `ci_coverage` (audit) |
 | Queueing | `build_queueing_problem` | `run_queueing_search` | `apply_queueing_solution` | `absolute_error`, `relative_error`, `ci_coverage` (audit) |
+| Association | `build_association_problem` | `run_association_search` | `apply_association_solution` | `mean_lift`, `mean_confidence`, counts (rules on hidden transactions) |
+| Survival | `build_survival_problem` | `run_survival_search` | `apply_survival_solution` | `c_index`, `mae` (time mode) |
+| Assignment/TSP | `build_assignment_problem` | `run_assignment_search` | `apply_assignment_solution` | `total_cost` |
 
 Every slice declares `API_SCHEMA_VERSION = "1.0"` and distinguishes itself
 through `capabilities()["operations"]`; the version is shared because the
