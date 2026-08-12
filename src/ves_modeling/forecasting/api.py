@@ -174,6 +174,7 @@ def run_forecasting_search(
     target_column: str = "target",
     frequency: str = "D",
     row_order: str = "key",
+    method_family: str | None = None,
 ) -> ForecastingSearchResult:
     """Search a long-format forecasting task and return the host-verified best.
 
@@ -220,7 +221,9 @@ def run_forecasting_search(
     candidate_root = run_dir / "candidates"
 
     if generator == "mock":
-        candidate = MockForecastingGenerator(fixture_dir)
+        candidate = MockForecastingGenerator(
+            fixture_dir, method_family=method_family
+        )
         runner = LocalRegressionRunner(
             workspace=candidate_root, data_dir=public_dir, run_layout="flat"
         )
@@ -247,6 +250,7 @@ def run_forecasting_search(
             horizon=contract.horizon,
             feature_columns=contract.feature_columns,
             row_order=row_order,
+            method_family=method_family,
         )
         docker_config = DockerRunnerConfig(
             workspace=candidate_root,

@@ -24,6 +24,36 @@ MOCK_FIXTURES = (
     "linear_forecast.py",
 )
 
+FAMILY_FIXTURES = {
+    "statistical": (
+        "family_statistical_seasonal_naive.py",
+        "family_statistical_linear_seasonal.py",
+    ),
+    "ml": (
+        "family_ml_ridge_lag.py",
+        "family_ml_ridge_lag.py",
+    ),
+    "mechanistic": (
+        "family_mechanistic_decomp_sine.py",
+        "family_mechanistic_decomp_sine.py",
+    ),
+}
+
+FAMILY_PROMPT_LINES = {
+    "statistical": (
+        "本次聚焦方法族 statistical：统计方法（季节朴素、线性+季节哑元、"
+        "Holt-Winters 类），强调趋势与季节分解。"
+    ),
+    "ml": (
+        "本次聚焦方法族 ml：机器学习方法（滞后特征 + 日历特征的岭回归等），"
+        "强调特征工程与正则化。"
+    ),
+    "mechanistic": (
+        "本次聚焦方法族 mechanistic：机理/结构方法（趋势分解 + 正弦周期结构、"
+        "阻尼趋势），强调可解释结构。"
+    ),
+}
+
 
 class LlmClient(Protocol):
     """Minimal OpenAI-compatible client used by generators."""
@@ -51,10 +81,21 @@ class MockForecastingGenerator:
         *,
         drafts: tuple[str, ...] = MOCK_FIXTURES[:2],
         improves: tuple[str, ...] = MOCK_FIXTURES[1:],
+        method_family: str | None = None,
     ) -> None:
+        if method_family is not None:
+            if method_family not in FAMILY_FIXTURES:
+                raise ValueError(
+                    f"method_family must be one of {tuple(FAMILY_FIXTURES)}"
+                )
+            drafts = FAMILY_FIXTURES[method_family]
+            improves = FAMILY_FIXTURES[method_family][1:]
+            if not improves:
+                improves = FAMILY_FIXTURES[method_family]
         self._fixture_dir = Path(fixture_dir)
         self._drafts = tuple(drafts)
         self._improves = tuple(improves)
+        self._method_family = method_family
 
     def draft(self, problem: VerifiedProblem, index: int) -> str:
         name = self._drafts[index % len(self._drafts)]
@@ -104,10 +145,16 @@ def _draft_prompt(
     horizon: int,
     feature_columns: tuple[str, ...],
     row_order: str,
+    method_family: str | None = None,
 ) -> str:
     lines = [
         "You are solving a time-series forecasting task.",
         "",
+    ]
+    if method_family is not None:
+        lines.append(FAMILY_PROMPT_LINES[method_family])
+        lines.append("")
+    lines += [
         "Available files:",
         "/data/train.csv",
         "/data/test_features.csv",
@@ -177,12 +224,18 @@ def _improve_prompt(
     horizon: int,
     feature_columns: tuple[str, ...],
     row_order: str,
+    method_family: str | None = None,
 ) -> str:
     lines = [
         "Previous candidate:",
         "",
         code,
         "",
+    ]
+    if method_family is not None:
+        lines.append(FAMILY_PROMPT_LINES[method_family])
+        lines.append("")
+    lines += [
         "Host-verified evidence (independently recomputed by the host):",
         "",
         f"RMSE: {rmse:.6f}",
@@ -260,6 +313,7 @@ class LLMForecastingGenerator:
         horizon: int = 1,
         feature_columns: tuple[str, ...] = (),
         row_order: str = "key",
+        method_family: str | None = None,
     ) -> None:
         self._llm = llm
         self._fallback_code = fallback_code
@@ -274,6 +328,11 @@ class LLMForecastingGenerator:
         self._horizon = horizon
         self._feature_columns = tuple(feature_columns)
         self._row_order = row_order
+        if method_family is not None and method_family not in FAMILY_PROMPT_LINES:
+            raise ValueError(
+                f"method_family must be one of {tuple(FAMILY_PROMPT_LINES)}"
+            )
+        self._method_family = method_family
 
     def _complete(self, prompt: str) -> str:
         try:
@@ -298,6 +357,7 @@ class LLMForecastingGenerator:
                 horizon=self._horizon,
                 feature_columns=self._feature_columns,
                 row_order=self._row_order,
+                method_family=self._method_family,
             )
         )
 
@@ -321,6 +381,7 @@ class LLMForecastingGenerator:
                 horizon=self._horizon,
                 feature_columns=self._feature_columns,
                 row_order=self._row_order,
+                method_family=self._method_family,
             )
         )
 
