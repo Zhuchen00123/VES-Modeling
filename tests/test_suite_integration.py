@@ -3,9 +3,10 @@
 This suite is intentionally cross-cutting: it asserts the public contract of
 the whole package (regression / forecasting / classification / optimization /
 ODE / clustering / anomaly / graph / Monte Carlo / multi-objective /
-recommendation) without re-running every per-slice behavior test.  It also
-guards the architecture rule that we do not introduce universal task/solver
-abstractions before repeated real-domain requirements exist.
+recommendation / probabilistic) without re-running every per-slice behavior
+test.  It also guards the architecture rule that we do not introduce
+universal task/solver abstractions before repeated real-domain requirements
+exist.
 """
 
 from __future__ import annotations
@@ -49,6 +50,10 @@ from ves_modeling.optimization.problem import build_optimization_problem
 from ves_modeling.optimization.schema import (
     capabilities as optimization_capabilities,
 )
+from ves_modeling.probabilistic.problem import build_probabilistic_problem
+from ves_modeling.probabilistic.schema import (
+    capabilities as probabilistic_capabilities,
+)
 from ves_modeling.recommendation.problem import build_recommendation_problem
 from ves_modeling.recommendation.schema import (
     capabilities as recommendation_capabilities,
@@ -70,6 +75,7 @@ ALL_CAPABILITIES = (
     montecarlo_capabilities,
     multiobjective_capabilities,
     recommendation_capabilities,
+    probabilistic_capabilities,
 )
 
 
@@ -84,6 +90,7 @@ def test_top_level_exports_all_builders() -> None:
         "build_multiobjective_problem",
         "build_ode_problem",
         "build_optimization_problem",
+        "build_probabilistic_problem",
         "build_recommendation_problem",
         "build_regression_problem",
     }
@@ -93,7 +100,7 @@ def test_top_level_exports_all_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 11
+    assert len(declared) == 12
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -400,6 +407,26 @@ def _make_recommendation_data(root: Path) -> tuple[Path, Path]:
     return public, host
 
 
+def _make_probabilistic_data(root: Path) -> tuple[Path, Path]:
+    public = root / "public"
+    host = root / "host"
+    public.mkdir(parents=True)
+    host.mkdir(parents=True)
+    (public / "problem.json").write_text(
+        json.dumps(
+            {"version": 1, "family": "normal", "quantity": "mean"}
+        ),
+        encoding="utf-8",
+    )
+    pd.DataFrame({"value": np.arange(20, dtype=float)}).to_csv(
+        public / "train.csv", index=False
+    )
+    (host / "hidden_parameters.json").write_text(
+        json.dumps({"mean": 10.0, "std": 6.0}), encoding="utf-8"
+    )
+    return public, host
+
+
 def test_all_build_problems_constructible(tmp_path: Path) -> None:
     reg_public, reg_host = _make_regression_data(tmp_path / "reg")
     assert build_regression_problem(reg_public, reg_host) is not None
@@ -438,3 +465,6 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     rec_public, rec_host = _make_recommendation_data(tmp_path / "rec")
     assert build_recommendation_problem(rec_public, rec_host) is not None
+
+    prob_public, prob_host = _make_probabilistic_data(tmp_path / "prob")
+    assert build_probabilistic_problem(prob_public, prob_host) is not None
