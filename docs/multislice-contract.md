@@ -2,7 +2,7 @@
 
 This document is the cross-cutting public contract for the six vertical
 slices (regression, forecasting, classification, optimization, ODE,
-clustering, anomaly detection, graph).  Per-slice behavior contracts live in each slice's data
+clustering, anomaly detection, graph, Monte Carlo, multi-objective).  Per-slice behavior contracts live in each slice's data
 contract module; this page records the shared decisions and the frozen
 API naming used by all slices.
 
@@ -18,6 +18,8 @@ API naming used by all slices.
 | Clustering | `build_clustering_problem` | `run_clustering_search` | `apply_clustering_solution` | `ari`, `nmi`, `v_measure`, `silhouette` (optional) |
 | Anomaly | `build_anomaly_problem` | `run_anomaly_search` | `apply_anomaly_solution` | `auroc`, `average_precision` (score) / `f1`, `balanced_accuracy` (label) |
 | Graph | `build_graph_problem` | `run_graph_search` | `apply_graph_solution` | `total_weight`/`total_value` + violations (`shortest_path`/`max_flow`/`min_spanning_tree`) |
+| Monte Carlo | `build_montecarlo_problem` | `run_montecarlo_search` | `apply_montecarlo_solution` | `absolute_error`, `relative_error`, `ci_coverage` (audit) |
+| Multi-objective | `build_multiobjective_problem` | `run_multiobjective_search` | `apply_multiobjective_solution` | `hypervolume` (2D exact) + dominance counts |
 
 Every slice declares `API_SCHEMA_VERSION = "1.0"` and distinguishes itself
 through `capabilities()["operations"]`; the version is shared because the
@@ -68,6 +70,11 @@ would be speculative API until a real workflow needs it.
 - Optimization `best_solution.py` may still be written when `best_code`
   exists but the host judged it infeasible; the `status` field expresses this
   (`rejected` / `no_verified`), same as regression behavior.
+- Multi-objective optimization evaluates both linear objectives in the
+  MAXIMIZE sense (express minimization with negative coefficients); the
+  default reference point is each objective's box upper bound + 1, which
+  dominates any feasible point.  Hypervolume is a relative quality measure
+  of the delivered solution set; global optimality is never claimed.
 - Clustering `silhouette` is computed on the public `test_features.csv`
   with the candidate's labels when computable (>=2 clusters and enough
   samples); otherwise it falls back to `0.0` and never blocks verification.
