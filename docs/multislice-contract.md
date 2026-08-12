@@ -4,7 +4,8 @@ This document is the cross-cutting public contract for the six vertical
 slices (regression, forecasting, classification, optimization, ODE,
 clustering, anomaly detection, graph, Monte Carlo, multi-objective,
 recommendation, probabilistic inference, queueing, association rules,
-survival analysis, assignment/TSP).  Per-slice behavior contracts live in each slice's data
+survival analysis, assignment/TSP, Markov chain, bin packing,
+change-point detection).  Per-slice behavior contracts live in each slice's data
 contract module; this page records the shared decisions and the frozen
 API naming used by all slices.
 
@@ -28,6 +29,9 @@ API naming used by all slices.
 | Association | `build_association_problem` | `run_association_search` | `apply_association_solution` | `mean_lift`, `mean_confidence`, counts (rules on hidden transactions) |
 | Survival | `build_survival_problem` | `run_survival_search` | `apply_survival_solution` | `c_index`, `mae` (time mode) |
 | Assignment/TSP | `build_assignment_problem` | `run_assignment_search` | `apply_assignment_solution` | `total_cost` |
+| Markov chain | `build_markov_problem` | `run_markov_search` | `apply_markov_solution` | `absolute_error`, `relative_error`, `ci_coverage` (audit) |
+| Bin packing | `build_binpacking_problem` | `run_binpacking_search` | `apply_binpacking_solution` | `bin_count` + capacity violations |
+| Change-point | `build_changepoint_problem` | `run_changepoint_search` | `apply_changepoint_solution` | `precision`, `recall`, `f1`, `mean_distance` |
 
 Every slice declares `API_SCHEMA_VERSION = "1.0"` and distinguishes itself
 through `capabilities()["operations"]`; the version is shared because the

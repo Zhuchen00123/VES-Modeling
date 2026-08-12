@@ -4,8 +4,8 @@ This suite is intentionally cross-cutting: it asserts the public contract of
 the whole package (regression / forecasting / classification / optimization /
 ODE / clustering / anomaly / graph / Monte Carlo / multi-objective /
 recommendation / probabilistic / queueing / association / survival /
-assignment / markov / binpacking) without re-running every per-slice
-behavior test.  It
+assignment / markov / binpacking / changepoint) without re-running every
+per-slice behavior test.  It
 also guards the architecture rule that we do not introduce universal
 task/solver abstractions before repeated real-domain requirements exist.
 """
@@ -34,6 +34,10 @@ from ves_modeling.association.schema import (
 from ves_modeling.binpacking.problem import build_binpacking_problem
 from ves_modeling.binpacking.schema import (
     capabilities as binpacking_capabilities,
+)
+from ves_modeling.changepoint.problem import build_changepoint_problem
+from ves_modeling.changepoint.schema import (
+    capabilities as changepoint_capabilities,
 )
 from ves_modeling.classification.problem import build_classification_problem
 from ves_modeling.classification.schema import (
@@ -90,6 +94,7 @@ ALL_CAPABILITIES = (
     assignment_capabilities,
     association_capabilities,
     binpacking_capabilities,
+    changepoint_capabilities,
     regression_capabilities,
     forecasting_capabilities,
     classification_capabilities,
@@ -113,6 +118,7 @@ def test_top_level_exports_all_builders() -> None:
         "build_assignment_problem",
         "build_association_problem",
         "build_binpacking_problem",
+        "build_changepoint_problem",
         "build_anomaly_problem",
         "build_classification_problem",
         "build_clustering_problem",
@@ -135,7 +141,7 @@ def test_top_level_exports_all_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 18
+    assert len(declared) == 19
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -557,6 +563,24 @@ def _write_binpacking_problem(root: Path) -> Path:
     return public
 
 
+def _write_changepoint_data(root: Path) -> tuple[Path, Path]:
+    public = root / "public"
+    host = root / "host"
+    public.mkdir(parents=True)
+    host.mkdir(parents=True)
+    pd.DataFrame(
+        {"t": [float(i) for i in range(40)], "y": [0.0] * 40}
+    ).to_csv(public / "train.csv", index=False)
+    y = [0.0] * 30 + [10.0] * 30
+    pd.DataFrame(
+        {"t": [float(i) for i in range(60)], "y": y}
+    ).to_csv(public / "test_features.csv", index=False)
+    pd.DataFrame({"changepoint": [30]}).to_csv(
+        host / "hidden_test_changepoints.csv", index=False
+    )
+    return public, host
+
+
 def _make_markov_data(root: Path) -> tuple[Path, Path]:
     public = root / "public"
     host = root / "host"
@@ -646,3 +670,6 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     bin_public = _write_binpacking_problem(tmp_path / "bin")
     assert build_binpacking_problem(bin_public) is not None
+
+    cp_public, cp_host = _write_changepoint_data(tmp_path / "cp")
+    assert build_changepoint_problem(cp_public, cp_host) is not None
