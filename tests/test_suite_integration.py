@@ -5,7 +5,8 @@ the whole package (regression / forecasting / classification / optimization /
 ODE / clustering / anomaly / graph / Monte Carlo / multi-objective /
 recommendation / probabilistic / queueing / association / survival /
 assignment / markov / binpacking / changepoint / lqr / seqpattern / sir /
-cellular) without re-running every per-slice behavior test.  It
+cellular / networksir) without re-running every per-slice behavior test.
+It
 also guards the architecture rule that we do not introduce universal
 task/solver abstractions before repeated real-domain requirements exist.
 """
@@ -69,6 +70,10 @@ from ves_modeling.multiobjective.problem import build_multiobjective_problem
 from ves_modeling.multiobjective.schema import (
     capabilities as multiobjective_capabilities,
 )
+from ves_modeling.networksir.problem import build_networksir_problem
+from ves_modeling.networksir.schema import (
+    capabilities as networksir_capabilities,
+)
 from ves_modeling.ode.problem import build_ode_problem
 from ves_modeling.ode.schema import capabilities as ode_capabilities
 from ves_modeling.optimization.problem import build_optimization_problem
@@ -120,6 +125,7 @@ ALL_CAPABILITIES = (
     markov_capabilities,
     montecarlo_capabilities,
     multiobjective_capabilities,
+    networksir_capabilities,
     recommendation_capabilities,
     probabilistic_capabilities,
     queueing_capabilities,
@@ -145,6 +151,7 @@ def test_top_level_exports_all_builders() -> None:
         "build_markov_problem",
         "build_montecarlo_problem",
         "build_multiobjective_problem",
+        "build_networksir_problem",
         "build_ode_problem",
         "build_optimization_problem",
         "build_probabilistic_problem",
@@ -161,7 +168,7 @@ def test_top_level_exports_all_builders() -> None:
 
 def test_capabilities_share_schema_version_and_apply_contract() -> None:
     declared = [fn() for fn in ALL_CAPABILITIES]
-    assert len(declared) == 23
+    assert len(declared) == 24
     for entry in declared:
         assert entry["api_schema_version"] == "1.0"
         assert entry["apply_statuses"] == ["produced_unverified"]
@@ -436,6 +443,28 @@ def _write_multiobjective_problem(root: Path) -> Path:
                     {"coefficients": {"x1": 1.0}},
                 ],
                 "constraints": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return public
+
+
+def _write_networksir_problem(root: Path) -> Path:
+    public = root / "public"
+    public.mkdir(parents=True)
+    (public / "problem.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "model": "network_sir",
+                "beta": 0.3,
+                "gamma": 0.1,
+                "n_nodes": 10,
+                "edges": [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5]],
+                "i0": 1,
+                "t_end": 20,
+                "quantity": "final_size",
             }
         ),
         encoding="utf-8",
@@ -763,6 +792,9 @@ def test_all_build_problems_constructible(tmp_path: Path) -> None:
 
     moo_public = _write_multiobjective_problem(tmp_path / "moo")
     assert build_multiobjective_problem(moo_public) is not None
+
+    nsir_public = _write_networksir_problem(tmp_path / "nsir")
+    assert build_networksir_problem(nsir_public) is not None
 
     rec_public, rec_host = _make_recommendation_data(tmp_path / "rec")
     assert build_recommendation_problem(rec_public, rec_host) is not None

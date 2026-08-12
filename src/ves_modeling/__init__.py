@@ -14,6 +14,7 @@ from ves_modeling.lqr.problem import build_lqr_problem
 from ves_modeling.markov.problem import build_markov_problem
 from ves_modeling.montecarlo.problem import build_montecarlo_problem
 from ves_modeling.multiobjective.problem import build_multiobjective_problem
+from ves_modeling.networksir.problem import build_networksir_problem
 from ves_modeling.ode.problem import build_ode_problem
 from ves_modeling.optimization.problem import build_optimization_problem
 from ves_modeling.probabilistic.problem import build_probabilistic_problem
@@ -39,6 +40,7 @@ __all__ = [
     "build_markov_problem",
     "build_montecarlo_problem",
     "build_multiobjective_problem",
+    "build_networksir_problem",
     "build_ode_problem",
     "build_optimization_problem",
     "build_probabilistic_problem",
