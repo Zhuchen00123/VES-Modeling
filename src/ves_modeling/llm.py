@@ -11,10 +11,24 @@ Configuration:
 from __future__ import annotations
 
 import json
+import logging
 import os
+import threading
 import time
 
 import httpx
+
+logger = logging.getLogger(__name__)
+
+# The upstream gateway throttles concurrent long SSE generations: with 2-3
+# simultaneous streams one call is starved for minutes (observed 85s/156s/407s
+# in a 3-way probe, and a 70+ minute no-output stall with connection pileup in
+# the parallel experiment).  LLM requests are therefore serialized
+# process-wide; Docker candidate execution is unaffected and stays parallel.
+# This covers the current single-experiment process; future multi-process
+# runners need a cross-process throttle (e.g. a file lock) for the same
+# guarantee.
+_LLM_REQUEST_LOCK = threading.Lock()
 
 
 class OpenAICompatibleClient:
@@ -74,26 +88,55 @@ class OpenAICompatibleClient:
             payload["reasoning_effort"] = self.reasoning_effort
         headers = {"Authorization": f"Bearer {self.api_key}"}
         url = f"{self.base_url}/chat/completions"
-
-        last_error: Exception | None = None
-        for attempt in range(self.max_attempts):
-            try:
-                return self._stream_completion(url, payload, headers)
-            except httpx.HTTPStatusError as exc:
-                if exc.response.status_code < 500:
-                    raise  # 4xx (e.g. auth) is not transient
-                last_error = exc
-            except (httpx.TransportError, json.JSONDecodeError) as exc:
-                last_error = exc
-            except RuntimeError as exc:
-                if "reasoning-only" not in str(exc):
-                    raise  # non-transient client error
-                last_error = exc
-            if attempt < self.max_attempts - 1:
-                time.sleep(15 * (attempt + 1))
-        raise RuntimeError(
-            f"LLM request failed after {self.max_attempts} attempts: {last_error}"
-        ) from last_error
+        started = time.monotonic()
+        logger.info(
+            "LLM request start model=%s max_tokens=%d reasoning_effort=%r",
+            self.model,
+            self.max_tokens,
+            self.reasoning_effort or None,
+        )
+        # Hold the lock across the whole retry loop so at most one stream is
+        # in flight per process (attempts and backoff sleeps included).
+        with _LLM_REQUEST_LOCK:
+            request_started = time.monotonic()
+            last_error: Exception | None = None
+            for attempt in range(self.max_attempts):
+                try:
+                    content = self._stream_completion(url, payload, headers)
+                    logger.info(
+                        "LLM request done model=%s attempt=%d "
+                        "queue_wait=%.1fs request_elapsed=%.1fs chars=%d",
+                        self.model,
+                        attempt + 1,
+                        request_started - started,
+                        time.monotonic() - request_started,
+                        len(content),
+                    )
+                    return content
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code < 500:
+                        raise  # 4xx (e.g. auth) is not transient
+                    last_error = exc
+                except (httpx.TransportError, json.JSONDecodeError) as exc:
+                    last_error = exc
+                except RuntimeError as exc:
+                    if "reasoning-only" not in str(exc):
+                        raise  # non-transient client error
+                    last_error = exc
+                if attempt < self.max_attempts - 1:
+                    logger.warning(
+                        "LLM request attempt %d/%d failed (%s); retrying "
+                        "in %.0fs",
+                        attempt + 1,
+                        self.max_attempts,
+                        type(last_error).__name__,
+                        15 * (attempt + 1),
+                    )
+                    time.sleep(15 * (attempt + 1))
+            raise RuntimeError(
+                "LLM request failed after "
+                f"{self.max_attempts} attempts: {last_error}"
+            ) from last_error
 
     def _stream_completion(
         self, url: str, payload: dict, headers: dict
