@@ -25,3 +25,7 @@ team/
 # Local handoff / continuation (not public)
 HANDOFF.md
 CONTINUATION.md
+
+# Local work notes / test artifacts (not public)
+task_now.md
+.writetest
