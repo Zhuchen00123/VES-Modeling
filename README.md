@@ -400,9 +400,15 @@ fixtures/{forecasting,classification,optimization,ode,clustering,anomaly,graph,m
 examples/regression_demo.py      --mock / --llm 入口
 scripts/generate_regression_data.py
 tests/                           verifier / problem / mock search / claim-ignored / docker hidden truth / suite integration
-docs/                            ves-core-understanding / architecture / core-gaps / r7.3 contract / multislice-contract
+docs/                            ves-core-understanding / architecture / core-gaps / r7.3 contract / multislice-contract / experiment-summary / search-strategy
 PyPI: verified-executable-search    VES Core v0.1.0（正式依赖）
 ```
+
+## 实验总结与固定搜索策略
+
+- 实验结论：见 [`docs/experiment-summary.md`](docs/experiment-summary.md)（R0–R7.3 里程碑、R3 三臂对照：long-single 多探针稳迭代为默认最优、各阶段结论）。
+- 固定搜索策略：见 [`docs/search-strategy.md`](docs/search-strategy.md)。默认以 **long-single** 为主策略，配合 Judge 校验、≥3 次重复、拒绝单一数字、multi-round 试探等固定用法；是长期稳定的生产推荐。
+- 约束：后续原则上**不再跑重型实验**（仅做简单验证实验）；LLM 供应商已更换，新 key 在用户处另行获取。
 
 ## 安全
 
